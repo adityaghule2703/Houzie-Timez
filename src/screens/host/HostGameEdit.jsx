@@ -726,24 +726,25 @@ const HostGameEdit = ({ navigation, route }) => {
     );
   };
 
+  // Get Ionicons for pattern types
   const getPatternIcon = (logicType) => {
-    if (!logicType) return '🎮';
+    if (!logicType) return 'game-controller';
     
     switch (logicType.toLowerCase()) {
       case 'position_based':
-        return '🎯';
+        return 'locate';
       case 'count_based':
-        return '🔢';
+        return 'stats-chart';
       case 'all_numbers':
-        return '⭐';
+        return 'star';
       case 'row_complete':
-        return '📊';
+        return 'grid';
       case 'number_based':
-        return '🎲';
+        return 'dice';
       case 'number_range':
-        return '📈';
+        return 'trending-up';
       default:
-        return '🎮';
+        return 'game-controller';
     }
   };
 
@@ -781,9 +782,11 @@ const HostGameEdit = ({ navigation, route }) => {
               styles.patternIcon,
               { backgroundColor: getPatternColor(item.logic_type) + '20' }
             ]}>
-              <Text style={{ color: getPatternColor(item.logic_type), fontSize: 16 }}>
-                {getPatternIcon(item.logic_type)}
-              </Text>
+              <Ionicons 
+                name={getPatternIcon(item.logic_type)} 
+                size={16} 
+                color={getPatternColor(item.logic_type)} 
+              />
             </View>
             <View style={styles.patternText}>
               <Text style={styles.patternName} numberOfLines={1}>
@@ -928,9 +931,11 @@ const HostGameEdit = ({ navigation, route }) => {
               styles.availablePatternIcon,
               { backgroundColor: getPatternColor(item.logic_type) + '20' }
             ]}>
-              <Text style={{ color: getPatternColor(item.logic_type), fontSize: 16 }}>
-                {getPatternIcon(item.logic_type)}
-              </Text>
+              <Ionicons 
+                name={getPatternIcon(item.logic_type)} 
+                size={14} 
+                color={getPatternColor(item.logic_type)} 
+              />
             </View>
             {isSelected ? (
               <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />

@@ -14,6 +14,11 @@ import {
   RefreshControl,
   Modal,
 } from "react-native";
+import {
+  Pusher,
+  PusherChannel,
+  PusherEvent,
+} from '@pusher/pusher-websocket-react-native';
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import Ionicons from "react-native-vector-icons/Ionicons";
@@ -226,6 +231,12 @@ const HostGameRoom = ({ navigation, route }) => {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   
+  // Pusher Refs
+  const pusherRef = useRef(null);
+  const gameStatusChannelRef = useRef(null);
+  const numberCallingChannelRef = useRef(null);
+  const claimsChannelRef = useRef(null);
+
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const manualButtonAnim = useRef(new Animated.Value(1)).current;
   const claimsRef = useRef([]);
@@ -233,47 +244,224 @@ const HostGameRoom = ({ navigation, route }) => {
   const autoModeWasRunningRef = useRef(false);
 
   useEffect(() => { 
-    fetchGameStatus();
-    checkChatStatus();
-    fetchPendingClaimsCount();
-    startPulseAnimation();
-
-    const statusInterval = setInterval(fetchGameStatus, 15000);
-    const chatStatusInterval = setInterval(checkChatStatus, 15000);
-    const claimsInterval = setInterval(fetchPendingClaimsCount, 3000);
-
+    const initializeApp = async () => {
+      try {
+        await initializePusher();
+        await fetchInitialData();
+        startPulseAnimation();
+        setLoading(false);
+      } catch (error) {
+        console.log("Error initializing app:", error);
+        showSnackbar("Failed to initialize Pusher. Please check your connection.", 'warning');
+        setLoading(false);
+      }
+    };
+    
+    initializeApp();
+    
     return () => {
-      clearInterval(statusInterval);
-      clearInterval(chatStatusInterval);
-      clearInterval(claimsInterval);
+      cleanupPusher();
     };
   }, []);
 
-  useEffect(() => {
-    if (claims.length > 0 && claimsRef.current.length > 0) {
-      const currentClaimIds = claimsRef.current.map(claim => claim.id);
-      const newClaims = claims.filter(claim => 
-        !currentClaimIds.includes(claim.id) && claim.status === 'pending'
-      );
+  // Initialize Pusher
+  const initializePusher = async () => {
+    try {
+      const pusher = Pusher.getInstance();
       
-      newClaims.forEach(claim => {
-        showClaimNotification(claim);
+      await pusher.init({
+        apiKey: "9c1d16690beded57332a",
+        cluster: "ap2",
       });
+      
+      await pusher.connect();
+      
+      // Subscribe to game status channel
+      const gameStatusChannel = await pusher.subscribe({
+        channelName: `game-status-${gameId}`,
+        onEvent: (event) => {
+          console.log("Game status event received:", event);
+          handleGameStatusEvent(event);
+        }
+      });
+      gameStatusChannelRef.current = gameStatusChannel;
+      
+      // Subscribe to number calling channel
+      const numberCallingChannel = await pusher.subscribe({
+        channelName: `number-calling-${gameId}`,
+        onEvent: (event) => {
+          console.log("Number calling event received:", event);
+          handleNumberCallingEvent(event);
+        }
+      });
+      numberCallingChannelRef.current = numberCallingChannel;
+      
+      // Subscribe to claims channel
+      const claimsChannel = await pusher.subscribe({
+        channelName: `game-claims-${gameId}`,
+        onEvent: (event) => {
+          console.log("Claims event received:", event);
+          handleClaimsEvent(event);
+        }
+      });
+      claimsChannelRef.current = claimsChannel;
+      
+      pusherRef.current = pusher;
+      
+      console.log("Pusher initialized successfully for host");
+    } catch (error) {
+      console.log("Error initializing Pusher:", error);
+      throw error;
     }
-    
-    claimsRef.current = claims;
-  }, [claims]);
+  };
 
-  useEffect(() => {
-    if (pendingClaimsCount > 0 && previousPendingCountRef.current === 0) {
-      if (numberCallingStatus?.is_running && !numberCallingStatus?.is_paused) {
-        autoModeWasRunningRef.current = true;
-        pauseNumberCallingAutomatically();
+  // Handle game status events from Pusher
+  const handleGameStatusEvent = (event) => {
+    if (event.eventName === 'game-updated') {
+      try {
+        const data = JSON.parse(event.data);
+        setGameStatus(data.game);
+      } catch (error) {
+        console.log("Error parsing game status event:", error);
       }
     }
+  };
+
+  // Handle number calling events from Pusher
+  const handleNumberCallingEvent = (event) => {
+    if (event.eventName === 'number-called') {
+      try {
+        const data = JSON.parse(event.data);
+        const newNumber = data.number;
+        
+        if (newNumber && !calledNumbers.includes(newNumber)) {
+          const updatedNumbers = [...calledNumbers, newNumber];
+          setCalledNumbers(updatedNumbers);
+          
+          // Refresh game status to get updated calling status
+          fetchGameStatus();
+        }
+      } catch (error) {
+        console.log("Error parsing number calling event:", error);
+      }
+    } else if (event.eventName === 'calling-started') {
+      try {
+        const data = JSON.parse(event.data);
+        setNumberCallingStatus(data.calling);
+        showSnackbar("Auto number calling started");
+      } catch (error) {
+        console.log("Error parsing calling started event:", error);
+      }
+    } else if (event.eventName === 'calling-paused') {
+      try {
+        const data = JSON.parse(event.data);
+        setNumberCallingStatus(data.calling);
+        showSnackbar("Number calling paused");
+      } catch (error) {
+        console.log("Error parsing calling paused event:", error);
+      }
+    } else if (event.eventName === 'calling-resumed') {
+      try {
+        const data = JSON.parse(event.data);
+        setNumberCallingStatus(data.calling);
+        showSnackbar("Number calling resumed");
+      } catch (error) {
+        console.log("Error parsing calling resumed event:", error);
+      }
+    }
+  };
+
+  // Handle claims events from Pusher
+  const handleClaimsEvent = (event) => {
+    if (event.eventName === 'claim-submitted') {
+      try {
+        const data = JSON.parse(event.data);
+        const claim = data.claim;
+        
+        // Update claims count
+        setPendingClaimsCount(prev => prev + 1);
+        setClaims(prev => [claim, ...prev]);
+        
+        // Show notification
+        const message = `📝 New claim submitted by ${claim.user_name} for ${claim.reward_name || claim.pattern_name}!`;
+        setSnackbarMessage(message);
+        setSnackbarVisible(true);
+        
+        // Automatically pause number calling if it's running
+        if (numberCallingStatus?.is_running && !numberCallingStatus?.is_paused) {
+          autoModeWasRunningRef.current = true;
+          pauseNumberCallingAutomatically();
+        }
+      } catch (error) {
+        console.log("Error parsing claim submitted event:", error);
+      }
+    } else if (event.eventName === 'claim-approved' || event.eventName === 'claim-rejected') {
+      try {
+        const data = JSON.parse(event.data);
+        const claim = data.claim;
+        
+        // Update claims list
+        setClaims(prev => prev.filter(c => c.id !== claim.id));
+        
+        // Update count if claim was pending
+        if (claim.claim_status === 'pending') {
+          setPendingClaimsCount(prev => Math.max(0, prev - 1));
+        }
+        
+        // Show notification
+        const action = event.eventName === 'claim-approved' ? 'approved' : 'rejected';
+        const message = `📋 ${claim.user_name}'s ${claim.reward_name || claim.pattern_name} claim has been ${action}!`;
+        setSnackbarMessage(message);
+        setSnackbarVisible(true);
+      } catch (error) {
+        console.log("Error parsing claim event:", error);
+      }
+    }
+  };
+
+  // Cleanup Pusher connections
+  const cleanupPusher = () => {
+    if (pusherRef.current) {
+      try {
+        if (gameStatusChannelRef.current) {
+          pusherRef.current.unsubscribe({
+            channelName: `game-status-${gameId}`
+          });
+        }
+        if (numberCallingChannelRef.current) {
+          pusherRef.current.unsubscribe({
+            channelName: `number-calling-${gameId}`
+          });
+        }
+        if (claimsChannelRef.current) {
+          pusherRef.current.unsubscribe({
+            channelName: `game-claims-${gameId}`
+          });
+        }
+        pusherRef.current.disconnect();
+      } catch (error) {
+        console.log("Error cleaning up Pusher:", error);
+      }
+    }
+  };
+
+  // Custom Snackbar functions
+  const showSnackbar = (message) => {
+    setSnackbarMessage(message);
+    setSnackbarVisible(true);
     
-    previousPendingCountRef.current = pendingClaimsCount;
-  }, [pendingClaimsCount, numberCallingStatus]);
+    setTimeout(() => {
+      setSnackbarVisible(false);
+    }, 3000);
+  };
+
+  const fetchInitialData = async () => {
+    await Promise.all([
+      fetchGameStatus(),
+      checkChatStatus(),
+      fetchPendingClaimsCount(),
+    ]);
+  };
 
   const pauseNumberCallingAutomatically = async () => {
     try {
@@ -298,12 +486,6 @@ const HostGameRoom = ({ navigation, route }) => {
     } catch (error) {
       console.log("Error automatically pausing number calling:", error);
     }
-  };
-
-  const showClaimNotification = (claim) => {
-    const message = `📝 New claim submitted by ${claim.user_name} for ${claim.pattern_name}!`;
-    setSnackbarMessage(message);
-    setSnackbarVisible(true);
   };
 
   const checkChatStatus = async () => {
@@ -358,6 +540,12 @@ const HostGameRoom = ({ navigation, route }) => {
           const message = `📝 ${newCount - previousCount} new claim${newCount - previousCount > 1 ? 's' : ''} submitted!`;
           setSnackbarMessage(message);
           setSnackbarVisible(true);
+          
+          // Automatically pause number calling if it's running
+          if (numberCallingStatus?.is_running && !numberCallingStatus?.is_paused) {
+            autoModeWasRunningRef.current = true;
+            pauseNumberCallingAutomatically();
+          }
         }
       }
     } catch (error) {
@@ -550,8 +738,8 @@ const HostGameRoom = ({ navigation, route }) => {
 
       if (response.data.success) {
         const calledNumber = response.data.data.number;
-        setCalledNumbers(prev => [...prev, calledNumber]);
-        fetchGameStatus();
+        // Pusher will handle the update via handleNumberCallingEvent
+        showSnackbar(`Called number: ${calledNumber}`);
       } else {
         throw new Error("Failed to call next number");
       }
@@ -585,6 +773,7 @@ const HostGameRoom = ({ navigation, route }) => {
       if (response.data.success) {
         setIntervalSeconds(60);
         fetchGameStatus();
+        showSnackbar("Number calling system initialized");
       } else {
         throw new Error("Failed to initialize number calling");
       }
@@ -616,11 +805,7 @@ const HostGameRoom = ({ navigation, route }) => {
       );
 
       if (response.data.success) {
-        Alert.alert(
-          "Success",
-          `Interval updated to ${intervalSeconds} seconds`,
-          [{ text: "OK" }]
-        );
+        showSnackbar(`Interval updated to ${intervalSeconds} seconds`);
       } else {
         throw new Error("Failed to update interval");
       }
@@ -653,6 +838,7 @@ const HostGameRoom = ({ navigation, route }) => {
 
       if (response.data.success) {
         fetchGameStatus();
+        showSnackbar("Auto number calling started");
       } else {
         throw new Error("Failed to start auto number calling");
       }
@@ -685,6 +871,7 @@ const HostGameRoom = ({ navigation, route }) => {
 
       if (response.data.success) {
         fetchGameStatus();
+        showSnackbar("Number calling paused");
       } else {
         throw new Error("Failed to pause number calling");
       }
@@ -717,6 +904,7 @@ const HostGameRoom = ({ navigation, route }) => {
 
       if (response.data.success) {
         fetchGameStatus();
+        showSnackbar("Number calling resumed");
       } else {
         throw new Error("Failed to resume number calling");
       }

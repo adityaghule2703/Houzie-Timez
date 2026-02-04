@@ -353,62 +353,23 @@ const HostGameCreation = ({ navigation, route }) => {
     );
   };
 
-  const renderPatternItem = useCallback(({ item }) => {
-    const isSelected = selectedPatterns.some(p => p.id === item.id);
-    
-    return (
-      <TouchableOpacity
-        style={[styles.patternCard, isSelected && styles.patternCardSelected]}
-        onPress={() => handlePatternSelect(item)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.patternCardContent}>
-          <View style={styles.patternCardHeader}>
-            <View style={[
-              styles.patternTypeBadge,
-              { backgroundColor: getPatternColor(item.logic_type) + '20' }
-            ]}>
-              <Text style={[
-                styles.patternTypeText,
-                { color: getPatternColor(item.logic_type) }
-              ]}>
-                {getPatternIcon(item.logic_type)}
-              </Text>
-            </View>
-            {isSelected ? (
-              <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
-            ) : (
-              <View style={styles.radioCircle} />
-            )}
-          </View>
-          
-          <Text style={styles.patternName} numberOfLines={2}>
-            {item.pattern_name.replace(/_/g, ' ')}
-          </Text>
-          <Text style={styles.patternDescription} numberOfLines={3}>
-            {item.description}
-          </Text>
-        </View>
-      </TouchableOpacity>
-    );
-  }, [selectedPatterns, handlePatternSelect]);
-
+  // Get Ionicons for pattern types
   const getPatternIcon = useCallback((logicType) => {
     switch (logicType) {
       case 'position_based':
-        return '🎯';
+        return 'locate';
       case 'count_based':
-        return '🔢';
+        return 'stats-chart';
       case 'all_numbers':
-        return '⭐';
+        return 'star';
       case 'row_complete':
-        return '📊';
+        return 'grid';
       case 'number_based':
-        return '🎲';
+        return 'dice';
       case 'number_range':
-        return '📈';
+        return 'trending-up';
       default:
-        return '🎮';
+        return 'game-controller';
     }
   }, []);
 
@@ -430,6 +391,45 @@ const HostGameCreation = ({ navigation, route }) => {
         return '#666';
     }
   }, []);
+
+  const renderPatternItem = useCallback(({ item }) => {
+    const isSelected = selectedPatterns.some(p => p.id === item.id);
+    
+    return (
+      <TouchableOpacity
+        style={[styles.patternCard, isSelected && styles.patternCardSelected]}
+        onPress={() => handlePatternSelect(item)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.patternCardContent}>
+          <View style={styles.patternCardHeader}>
+            <View style={[
+              styles.patternTypeBadge,
+              { backgroundColor: getPatternColor(item.logic_type) + '20' }
+            ]}>
+              <Ionicons 
+                name={getPatternIcon(item.logic_type)} 
+                size={14} 
+                color={getPatternColor(item.logic_type)} 
+              />
+            </View>
+            {isSelected ? (
+              <Ionicons name="checkmark-circle" size={18} color="#4CAF50" />
+            ) : (
+              <View style={styles.radioCircle} />
+            )}
+          </View>
+          
+          <Text style={styles.patternName} numberOfLines={2}>
+            {item.pattern_name.replace(/_/g, ' ')}
+          </Text>
+          <Text style={styles.patternDescription} numberOfLines={3}>
+            {item.description}
+          </Text>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [selectedPatterns, handlePatternSelect]);
 
   // Render Step Content
   const renderStepContent = () => {
@@ -765,9 +765,11 @@ const HostGameCreation = ({ navigation, route }) => {
                               styles.patternIcon,
                               { backgroundColor: getPatternColor(pattern.logic_type) + '20' }
                             ]}>
-                              <Text style={{ color: getPatternColor(pattern.logic_type), fontSize: 16 }}>
-                                {getPatternIcon(pattern.logic_type)}
-                              </Text>
+                              <Ionicons 
+                                name={getPatternIcon(pattern.logic_type)} 
+                                size={16} 
+                                color={getPatternColor(pattern.logic_type)} 
+                              />
                             </View>
                             <View style={styles.patternText}>
                               <Text style={styles.selectedPatternName} numberOfLines={1}>
@@ -1381,9 +1383,6 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  patternTypeText: {
-    fontSize: 14,
   },
   radioCircle: {
     width: 16,

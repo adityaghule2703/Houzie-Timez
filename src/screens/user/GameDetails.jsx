@@ -29,13 +29,13 @@ import Feather from "react-native-vector-icons/Feather";
 
 const { width } = Dimensions.get("window");
 
-// Color scheme matching Home page
-const PRIMARY_COLOR = "#005F6A"; // Main background color
-const SECONDARY_COLOR = "#004B54"; // Dark teal
-const ACCENT_COLOR = "#D4AF37"; // Gold
-const LIGHT_ACCENT = "#F5E6A8"; // Light gold
-const MUTED_GOLD = "#E6D8A2"; // Muted gold for text
-const DARK_TEAL = "#00343A"; // Darker teal
+// Updated Color scheme with #02658D as primary (matching FAQ page)
+const PRIMARY_COLOR = "#02658D"; // Main background color
+const SECONDARY_COLOR = "#02557A"; // Darker blue
+const ACCENT_COLOR = "#FFD54F"; // Light amber/Accent color
+const LIGHT_ACCENT = "#FFECB3"; // Very light amber
+const TEXT_LIGHT = "#E3F2FD"; // Light blue text
+const DARK_BLUE = "#014560"; // Darker blue for backgrounds
 const WHITE = "#FFFFFF";
 
 const GameDetails = ({ route, navigation }) => {
@@ -763,11 +763,11 @@ Looking forward to playing Tambola! 🎲🎉`;
         ]} 
       />
       
-      {/* Gold gradient overlay */}
-      <View style={styles.goldGradient} />
+      {/* Amber gradient overlay */}
+      <View style={styles.amberGradient} />
       
-      {/* Teal gradient overlay */}
-      <View style={styles.tealGradient} />
+      {/* Blue gradient overlay */}
+      <View style={styles.blueGradient} />
     </View>
   );
 
@@ -817,7 +817,7 @@ Looking forward to playing Tambola! 🎲🎉`;
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
               >
-                <Ionicons name="arrow-back" size={24} color={LIGHT_ACCENT} />
+                <Ionicons name="arrow-back" size={24} color={TEXT_LIGHT} />
               </TouchableOpacity>
               
               <View style={styles.headerTextContainer}>
@@ -828,7 +828,7 @@ Looking forward to playing Tambola! 🎲🎉`;
                   <MaterialIcons
                     name="fingerprint"
                     size={14}
-                    color={MUTED_GOLD}
+                    color={LIGHT_ACCENT}
                   />
                   <Text style={styles.gameCode}>{game.game_code}</Text>
                 </View>
@@ -868,7 +868,7 @@ Looking forward to playing Tambola! 🎲🎉`;
                       backgroundColor: gameStatus?.status === 'live' 
                         ? ACCENT_COLOR 
                         : gameStatus?.status === 'completed'
-                        ? MUTED_GOLD
+                        ? LIGHT_ACCENT
                         : ACCENT_COLOR
                     }
                   ]}>
@@ -942,7 +942,7 @@ Looking forward to playing Tambola! 🎲🎉`;
                     </View>
                     <View style={styles.statCard}>
                       <View style={styles.statIcon}>
-                        <Ionicons name="trophy" size={20} color={MUTED_GOLD} />
+                        <Ionicons name="trophy" size={20} color={LIGHT_ACCENT} />
                       </View>
                       <Text style={styles.statValue}>
                         Completed
@@ -1421,7 +1421,7 @@ Looking forward to playing Tambola! 🎲🎉`;
                 multiline
                 numberOfLines={3}
                 maxLength={200}
-                placeholderTextColor={MUTED_GOLD}
+                placeholderTextColor={LIGHT_ACCENT}
               />
               <Text style={styles.charCount}>
                 {ticketMessage.length}/200 characters
@@ -1517,24 +1517,24 @@ const styles = StyleSheet.create({
     left: 0,
     width: 100,
     height: '100%',
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    backgroundColor: 'rgba(255, 213, 79, 0.1)',
     transform: [{ skewX: '-20deg' }],
   },
-  goldGradient: {
+  amberGradient: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     height: 300,
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    backgroundColor: 'rgba(255, 213, 79, 0.05)',
   },
-  tealGradient: {
+  blueGradient: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     height: 200,
-    backgroundColor: 'rgba(0, 75, 84, 0.3)',
+    backgroundColor: 'rgba(2, 85, 122, 0.3)',
   },
   toast: {
     position: 'absolute',
@@ -1581,7 +1581,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: 100,
     height: '100%',
-    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    backgroundColor: 'rgba(255, 213, 79, 0.15)',
     transform: [{ skewX: '-20deg' }],
   },
   headerContent: {
@@ -1596,7 +1596,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -1609,7 +1609,7 @@ const styles = StyleSheet.create({
   gameName: {
     fontSize: 20,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     letterSpacing: -0.5,
     textShadowColor: 'rgba(0, 0, 0, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
@@ -1623,7 +1623,7 @@ const styles = StyleSheet.create({
   },
   gameCode: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     fontWeight: "500",
     opacity: 0.9,
   },
@@ -1664,7 +1664,7 @@ const styles = StyleSheet.create({
     height: 50,
     borderBottomLeftRadius: 16,
     borderTopRightRadius: 25,
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    backgroundColor: 'rgba(255, 213, 79, 0.05)',
   },
   cardHeader: {
     marginBottom: 16,
@@ -1678,7 +1678,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 10,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
@@ -1696,7 +1696,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     marginBottom: 4,
   },
   statusBadge: {
@@ -1715,7 +1715,7 @@ const styles = StyleSheet.create({
   },
   cardDescription: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     lineHeight: 20,
     marginBottom: 16,
   },
@@ -1732,7 +1732,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 10,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     justifyContent: "center",
     alignItems: "center",
     marginBottom: 6,
@@ -1742,12 +1742,12 @@ const styles = StyleSheet.create({
   statValue: {
     fontSize: 18,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     marginBottom: 2,
   },
   statLabel: {
     fontSize: 11,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     fontWeight: "500",
     opacity: 0.7,
   },
@@ -1784,7 +1784,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     paddingVertical: 14,
     borderRadius: 10,
     gap: 8,
@@ -1803,7 +1803,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     paddingVertical: 14,
     borderRadius: 10,
     gap: 8,
@@ -1827,7 +1827,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
   },
   ticketLimitContainer: {
     flexDirection: "row",
@@ -1843,14 +1843,14 @@ const styles = StyleSheet.create({
     borderColor: "rgba(231, 76, 60, 0.2)",
   },
   ticketLimitAvailable: {
-    backgroundColor: "rgba(212, 175, 55, 0.05)",
-    borderColor: "rgba(212, 175, 55, 0.2)",
+    backgroundColor: "rgba(255, 213, 79, 0.05)",
+    borderColor: "rgba(255, 213, 79, 0.2)",
   },
   ticketLimitIcon: {
     width: 32,
     height: 32,
     borderRadius: 8,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
@@ -1870,7 +1870,7 @@ const styles = StyleSheet.create({
   },
   ticketLimitText: {
     fontSize: 12,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     lineHeight: 16,
     opacity: 0.7,
   },
@@ -1889,7 +1889,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 8,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
@@ -1897,14 +1897,14 @@ const styles = StyleSheet.create({
   },
   detailLabel: {
     fontSize: 10,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     fontWeight: "500",
     marginBottom: 2,
     opacity: 0.7,
   },
   detailText: {
     fontSize: 12,
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     fontWeight: "600",
   },
   myCountContainer: {
@@ -1920,11 +1920,11 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   hasCountButton: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     borderColor: ACCENT_COLOR,
   },
   noCountButton: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     borderColor: ACCENT_COLOR,
     opacity: 0.7,
   },
@@ -1932,7 +1932,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    backgroundColor: "rgba(255, 213, 79, 0.1)",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
@@ -1943,7 +1943,7 @@ const styles = StyleSheet.create({
   },
   countLabel: {
     fontSize: 11,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     fontWeight: "500",
     marginBottom: 2,
     opacity: 0.7,
@@ -1956,11 +1956,11 @@ const styles = StyleSheet.create({
     color: ACCENT_COLOR,
   },
   noCountValue: {
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     opacity: 0.7,
   },
   messageCard: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     borderRadius: 10,
     padding: 12,
     borderWidth: 2,
@@ -1979,7 +1979,7 @@ const styles = StyleSheet.create({
   },
   messageContent: {
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     lineHeight: 18,
     opacity: 0.7,
   },
@@ -2013,7 +2013,7 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   secondaryActionButton: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     borderWidth: 2,
     borderColor: ACCENT_COLOR,
   },
@@ -2026,7 +2026,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
   },
   rewardCard: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     borderRadius: 10,
     padding: 12,
     marginBottom: 8,
@@ -2043,7 +2043,7 @@ const styles = StyleSheet.create({
     height: 40,
     borderBottomLeftRadius: 10,
     borderTopRightRadius: 15,
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    backgroundColor: 'rgba(255, 213, 79, 0.05)',
   },
   rewardHeader: {
     flexDirection: "row",
@@ -2055,7 +2055,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 8,
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    backgroundColor: "rgba(255, 213, 79, 0.1)",
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
@@ -2067,12 +2067,12 @@ const styles = StyleSheet.create({
   rewardName: {
     fontSize: 14,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     marginBottom: 2,
   },
   rewardDescription: {
     fontSize: 12,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     lineHeight: 16,
     opacity: 0.7,
   },
@@ -2097,11 +2097,11 @@ const styles = StyleSheet.create({
   },
   rewardDetailText: {
     fontSize: 11,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     opacity: 0.7,
   },
   patternBadge: {
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    backgroundColor: "rgba(255, 213, 79, 0.1)",
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 6,
@@ -2146,10 +2146,10 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
   },
   modalGameInfo: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     borderRadius: 10,
     padding: 15,
     marginBottom: 15,
@@ -2159,12 +2159,12 @@ const styles = StyleSheet.create({
   modalGameName: {
     fontSize: 16,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     marginBottom: 4,
   },
   modalGameId: {
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     marginBottom: 8,
     opacity: 0.7,
   },
@@ -2184,7 +2184,7 @@ const styles = StyleSheet.create({
   },
   modalHostText: {
     fontSize: 12,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     opacity: 0.7,
   },
   modalLimitInfo: {
@@ -2201,13 +2201,13 @@ const styles = StyleSheet.create({
     borderColor: "rgba(231, 76, 60, 0.2)",
   },
   modalLimitAvailable: {
-    backgroundColor: "rgba(212, 175, 55, 0.05)",
-    borderColor: "rgba(212, 175, 55, 0.2)",
+    backgroundColor: "rgba(255, 213, 79, 0.05)",
+    borderColor: "rgba(255, 213, 79, 0.2)",
   },
   modalLimitText: {
     flex: 1,
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     lineHeight: 18,
     opacity: 0.7,
   },
@@ -2217,7 +2217,7 @@ const styles = StyleSheet.create({
   quantityLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     marginBottom: 12,
   },
   quantitySelector: {
@@ -2228,7 +2228,7 @@ const styles = StyleSheet.create({
     width: 60,
     height: 60,
     borderRadius: 12,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
@@ -2240,19 +2240,19 @@ const styles = StyleSheet.create({
     borderColor: ACCENT_COLOR,
   },
   quantityButtonDisabled: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     opacity: 0.5,
   },
   quantityButtonText: {
     fontSize: 20,
     fontWeight: "700",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
   },
   quantityButtonTextActive: {
     color: SECONDARY_COLOR,
   },
   quantityButtonTextDisabled: {
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     textDecorationLine: 'line-through',
   },
   quantityDisabledIcon: {
@@ -2266,7 +2266,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     padding: 15,
     borderRadius: 10,
     marginBottom: 20,
@@ -2281,7 +2281,7 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 16,
     fontWeight: "600",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
   },
   totalAmount: {
     fontSize: 22,
@@ -2294,11 +2294,11 @@ const styles = StyleSheet.create({
   messageLabel: {
     fontSize: 14,
     fontWeight: "600",
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     marginBottom: 8,
   },
   messageInput: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     borderRadius: 10,
     padding: 15,
     fontSize: 14,
@@ -2306,11 +2306,11 @@ const styles = StyleSheet.create({
     textAlignVertical: "top",
     borderWidth: 2,
     borderColor: ACCENT_COLOR,
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
   },
   charCount: {
     fontSize: 12,
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     textAlign: "right",
     marginTop: 4,
     opacity: 0.7,
@@ -2321,7 +2321,7 @@ const styles = StyleSheet.create({
   },
   cancelButton: {
     flex: 1,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: DARK_BLUE,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -2331,7 +2331,7 @@ const styles = StyleSheet.create({
   cancelButtonText: {
     fontSize: 14,
     fontWeight: "600",
-    color: MUTED_GOLD,
+    color: LIGHT_ACCENT,
     opacity: 0.7,
   },
   submitButton: {

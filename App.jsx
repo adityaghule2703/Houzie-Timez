@@ -112,6 +112,7 @@ function UserTabs({ onLogout }) {
 }
 
 // Host Tabs Component
+// Host Tabs Component
 function HostTabs({ onLogout }) {
   return (
     <Tab.Navigator
@@ -133,7 +134,7 @@ function HostTabs({ onLogout }) {
           }
           return <FontAwesome name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#3498db',
+        tabBarActiveTintColor: '#FF7675', // Changed to #FF7675
         tabBarInactiveTintColor: 'gray',
         tabBarLabelStyle: {
           fontSize: 11,

@@ -29,9 +29,6 @@ const HostProfile = ({ navigation, onLogout }) => {
   const [editMode, setEditMode] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
-    email: "",
-    mobile: "",
-    address: "",
   });
   const [imageUri, setImageUri] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -79,12 +76,9 @@ const HostProfile = ({ navigation, onLogout }) => {
         const host = response.data.host;
         setHostData(host);
         
-        // Initialize form data
+        // Initialize form data with only editable field (name)
         setFormData({
           name: host.name || "",
-          email: host.email || "",
-          mobile: host.mobile || "",
-          address: host.address || "",
         });
         
         // Set profile image URL
@@ -332,11 +326,8 @@ const HostProfile = ({ navigation, onLogout }) => {
       const token = await AsyncStorage.getItem("hostToken");
       const formDataToSend = new FormData();
 
-      // Append text fields
+      // Append only editable fields (name)
       formDataToSend.append("name", formData.name);
-      formDataToSend.append("email", formData.email);
-      formDataToSend.append("mobile", formData.mobile);
-      formDataToSend.append("address", formData.address);
 
       // Append image if selected and it's a new local image
       if (imageUri && 
@@ -624,9 +615,6 @@ const HostProfile = ({ navigation, onLogout }) => {
                 // Reset form data to original
                 setFormData({
                   name: hostData?.name || "",
-                  email: hostData?.email || "",
-                  mobile: hostData?.mobile || "",
-                  address: hostData?.address || "",
                 });
                 // Reset image to original from server
                 if (hostData?.profile_image_url) {
@@ -670,62 +658,23 @@ const HostProfile = ({ navigation, onLogout }) => {
 
         <Text style={styles.sectionTitle}>Personal Details</Text>
         <View style={styles.infoCard}>
-          {editMode ? (
-            <>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Email:</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.email}
-                  onChangeText={(text) => handleInputChange("email", text)}
-                  placeholder="Email"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  editable={false}
-                />
-              </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Mobile:</Text>
-                <TextInput
-                  style={styles.input}
-                  value={formData.mobile}
-                  onChangeText={(text) => handleInputChange("mobile", text)}
-                  placeholder="Mobile number"
-                  keyboardType="phone-pad"
-                />
-              </View>
-              <View style={styles.inputContainer}>
-                <Text style={styles.inputLabel}>Address:</Text>
-                <TextInput
-                  style={[styles.input, styles.textArea]}
-                  value={formData.address}
-                  onChangeText={(text) => handleInputChange("address", text)}
-                  placeholder="Address"
-                  multiline
-                  numberOfLines={3}
-                />
-              </View>
-            </>
-          ) : (
-            <>
-              <View style={styles.detailRow}>
-                <FontAwesome name="envelope" size={16} color="#FF7675" style={styles.detailIcon} />
-                <Text style={styles.infoText}>Email: {hostData?.email || "N/A"}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <FontAwesome name="phone" size={16} color="#FF7675" style={styles.detailIcon} />
-                <Text style={styles.infoText}>Mobile: {hostData?.mobile || "N/A"}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <FontAwesome name="map-marker" size={16} color="#FF7675" style={styles.detailIcon} />
-                <Text style={styles.infoText}>Address: {hostData?.address || "Not set"}</Text>
-              </View>
-              <View style={styles.detailRow}>
-                <FontAwesome name="birthday-cake" size={16} color="#FF7675" style={styles.detailIcon} />
-                <Text style={styles.infoText}>Date of Birth: {formatDate(hostData?.dob)}</Text>
-              </View>
-            </>
-          )}
+          {/* Always show email, mobile, address as read-only */}
+          <View style={styles.detailRow}>
+            <FontAwesome name="envelope" size={16} color="#FF7675" style={styles.detailIcon} />
+            <Text style={styles.infoText}>Email: {hostData?.email || "N/A"}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <FontAwesome name="phone" size={16} color="#FF7675" style={styles.detailIcon} />
+            <Text style={styles.infoText}>Mobile: {hostData?.mobile || "N/A"}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <FontAwesome name="map-marker" size={16} color="#FF7675" style={styles.detailIcon} />
+            <Text style={styles.infoText}>Address: {hostData?.address || "Not set"}</Text>
+          </View>
+          <View style={styles.detailRow}>
+            <FontAwesome name="birthday-cake" size={16} color="#FF7675" style={styles.detailIcon} />
+            <Text style={styles.infoText}>Date of Birth: {formatDate(hostData?.dob)}</Text>
+          </View>
         </View>
 
         <Text style={styles.sectionTitle}>Account Details</Text>

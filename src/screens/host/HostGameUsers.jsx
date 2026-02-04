@@ -78,7 +78,7 @@ const HostGameUsers = ({ route, navigation }) => {
       case "pending":
         return "#FF9800";
       case "failed":
-        return "#F44336";
+        return "#FF7675";
       default:
         return "#607D8B";
     }
@@ -132,7 +132,7 @@ const HostGameUsers = ({ route, navigation }) => {
             {/* Request */}
             <View style={styles.statItem}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="receipt-outline" size={18} color="#3498db" />
+                <Ionicons name="receipt-outline" size={18} color="#FF7675" />
               </View>
               <View style={styles.statContent}>
                 <Text style={styles.statValue}>{user.total_requests}</Text>
@@ -143,7 +143,7 @@ const HostGameUsers = ({ route, navigation }) => {
             {/* Requested */}
             <View style={styles.statItem}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="ticket-outline" size={18} color="#3498db" />
+                <Ionicons name="ticket-outline" size={18} color="#9C27B0" />
               </View>
               <View style={styles.statContent}>
                 <Text style={styles.statValue}>{user.total_tickets_requested}</Text>
@@ -168,7 +168,7 @@ const HostGameUsers = ({ route, navigation }) => {
             {/* Amount */}
             <View style={styles.statItem}>
               <View style={styles.statIconContainer}>
-                <Ionicons name="cash-outline" size={18} color="#4CAF50" />
+                <Ionicons name="cash-outline" size={18} color="#FF9800" />
               </View>
               <View style={styles.statContent}>
                 <Text style={styles.statValue}>₹{user.paid_amount}</Text>
@@ -197,7 +197,7 @@ const HostGameUsers = ({ route, navigation }) => {
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <ActivityIndicator size="large" color="#FF7675" />
         <Text style={styles.loadingText}>Loading players list...</Text>
       </View>
     );
@@ -207,7 +207,7 @@ const HostGameUsers = ({ route, navigation }) => {
     return (
       <View style={styles.errorContainer}>
         <View style={styles.errorContent}>
-          <Ionicons name="alert-circle-outline" size={80} color="#F44336" />
+          <Ionicons name="alert-circle-outline" size={80} color="#FF7675" />
           <Text style={styles.errorTitle}>Unable to Load Players</Text>
           <Text style={styles.errorMessage}>{error}</Text>
           <TouchableOpacity
@@ -225,7 +225,7 @@ const HostGameUsers = ({ route, navigation }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor="#3498db" barStyle="light-content" />
+      <StatusBar backgroundColor="#FF7675" barStyle="light-content" />
 
       <View style={styles.header}>
         <TouchableOpacity
@@ -252,8 +252,8 @@ const HostGameUsers = ({ route, navigation }) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor="#3498db"
-            colors={["#3498db"]}
+            tintColor="#FF7675"
+            colors={["#FF7675"]}
           />
         }
         contentContainerStyle={styles.scrollContent}
@@ -263,19 +263,19 @@ const HostGameUsers = ({ route, navigation }) => {
             <Text style={styles.summaryTitle}>Game Summary</Text>
             <View style={styles.summaryGrid}>
               <View style={styles.summaryCard}>
-                <Ionicons name="people-outline" size={24} color="#3498db" />
+                <Ionicons name="people-outline" size={24} color="#FF7675" />
                 <Text style={styles.summaryCount}>{summary.total_users}</Text>
                 <Text style={styles.summaryLabel}>Total Players</Text>
               </View>
 
               <View style={styles.summaryCard}>
-                <Ionicons name="ticket-outline" size={24} color="#4CAF50" />
+                <Ionicons name="ticket-outline" size={24} color="#9C27B0" />
                 <Text style={styles.summaryCount}>{summary.total_approved_tickets}</Text>
                 <Text style={styles.summaryLabel}>Approved Tickets</Text>
               </View>
 
               <View style={styles.summaryCard}>
-                <Ionicons name="cash-outline" size={24} color="#9C27B0" />
+                <Ionicons name="cash-outline" size={24} color="#4CAF50" />
                 <Text style={styles.summaryCount}>₹{summary.total_paid_amount}</Text>
                 <Text style={styles.summaryLabel}>Total Revenue</Text>
               </View>
@@ -301,7 +301,7 @@ const HostGameUsers = ({ route, navigation }) => {
               alert("Export feature coming soon!");
             }}
           >
-            <Ionicons name="download-outline" size={16} color="#3498db" />
+            <Ionicons name="download-outline" size={16} color="#FF7675" />
             <Text style={styles.exportButtonText}>Export</Text>
           </TouchableOpacity>
         </View>
@@ -364,7 +364,7 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   header: {
-    backgroundColor: "#3498db",
+    backgroundColor: "#FF7675",
     paddingTop: 20,
     paddingBottom: 20,
     paddingHorizontal: 20,
@@ -469,7 +469,7 @@ const styles = StyleSheet.create({
   exportButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#E6F0FF",
+    backgroundColor: "#FFEBEE",
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 20,
@@ -478,7 +478,7 @@ const styles = StyleSheet.create({
   exportButtonText: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#3498db",
+    color: "#FF7675",
   },
   userCard: {
     backgroundColor: "#FFF",
@@ -503,7 +503,7 @@ const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "#3498db",
+    backgroundColor: "#FF7675",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -580,7 +580,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(52, 152, 219, 0.1)",
+    backgroundColor: "rgba(255, 118, 117, 0.1)",
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -659,12 +659,12 @@ const styles = StyleSheet.create({
   emptyStateButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#3498db",
+    backgroundColor: "#FF7675",
     paddingHorizontal: 24,
     paddingVertical: 14,
     borderRadius: 16,
     gap: 8,
-    shadowColor: "#3498db",
+    shadowColor: "#FF7675",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
@@ -730,12 +730,12 @@ const styles = StyleSheet.create({
   retryButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "#3498db",
+    backgroundColor: "#FF7675",
     paddingHorizontal: 28,
     paddingVertical: 14,
     borderRadius: 16,
     gap: 8,
-    shadowColor: "#3498db",
+    shadowColor: "#FF7675",
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
