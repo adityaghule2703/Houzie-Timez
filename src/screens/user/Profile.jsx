@@ -18,6 +18,7 @@ import {
   PermissionsAndroid,
   Platform,
   Linking,
+  StatusBar,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import axios from "axios";
@@ -30,14 +31,47 @@ import Icon from 'react-native-vector-icons/Ionicons';
 const { width } = Dimensions.get('window');
 const BASE_URL = "https://tambolatime.co.in/public/";
 
-// Updated Color scheme matching FAQ and Home
-const PRIMARY_COLOR = "#02658D"; // Main background color
-const SECONDARY_COLOR = "#02557A"; // Darker blue
-const ACCENT_COLOR = "#FFD54F"; // Light amber/Accent color
-const LIGHT_ACCENT = "#FFECB3"; // Very light amber
-const TEXT_LIGHT = "#E3F2FD"; // Light blue text
-const DARK_BLUE = "#014560"; // Darker blue for backgrounds
-const WHITE = "#FFFFFF";
+// Color palette matching Game component
+const COLORS = {
+  background: '#F0F7FF',
+  surface: '#FFFFFF',
+  primary: '#2E5BFF', // Vibrant blue
+  primaryLight: '#E1EBFF',
+  primaryDark: '#1A3A9E',
+  accent: '#3B82F6', // Medium blue for accents
+  secondary: '#60A5FA', // Light blue
+  tertiary: '#2563EB', // Darker blue for contrast
+  text: '#1E293B',
+  textSecondary: '#64748B',
+  textLight: '#94A3B8',
+  border: '#E2E8F0',
+  
+  // Card background variants
+  cardBlue1: '#E8F0FE',
+  cardBlue2: '#D4E4FF',
+  cardBlue3: '#C2D6FF',
+  cardBlue4: '#E3F2FD',
+  cardBlue5: '#E6F0FA',
+  
+  // Accent colors
+  purple: '#8B5CF6',
+  purpleLight: '#EDE9FE',
+  orange: '#F97316',
+  orangeLight: '#FFF3E6',
+  pink: '#EC4899',
+  pinkLight: '#FCE8F0',
+  teal: '#14B8A6',
+  tealLight: '#D5F5F0',
+  red: '#EF4444',
+  redLight: '#FEE2E2',
+  green: '#10B981',
+  greenLight: '#D1FAE5',
+  
+  // Block colors - Blue shades
+  blockLightBlue: '#E1EBFF',
+  blockMediumBlue: '#C2D6FF',
+  blockDarkBlue: '#A3C1FF',
+};
 
 const Profile = ({ onLogout, navigation }) => {
   const [user, setUser] = useState(null);
@@ -55,6 +89,8 @@ const Profile = ({ onLogout, navigation }) => {
   const [notificationModalVisible, setNotificationModalVisible] = useState(false);
   const [loadingNotifications, setLoadingNotifications] = useState(false);
   
+  // Animation values
+  const scrollY = useRef(new Animated.Value(0)).current;
   const scaleAnim = useRef(new Animated.Value(1)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
 
@@ -83,6 +119,161 @@ const Profile = ({ onLogout, navigation }) => {
     }).start();
   }, []);
 
+  // Animated background that moves with scroll
+  const AnimatedBackground = () => {
+    const block1TranslateY = scrollY.interpolate({
+      inputRange: [0, 300],
+      outputRange: [0, -50],
+      extrapolate: 'clamp'
+    });
+
+    const block2TranslateY = scrollY.interpolate({
+      inputRange: [0, 400],
+      outputRange: [0, -30],
+      extrapolate: 'clamp'
+    });
+
+    const block3TranslateY = scrollY.interpolate({
+      inputRange: [0, 500],
+      outputRange: [0, -20],
+      extrapolate: 'clamp'
+    });
+
+    const opacity = scrollY.interpolate({
+      inputRange: [0, 200, 400],
+      outputRange: [1, 0.8, 0.6],
+      extrapolate: 'clamp'
+    });
+
+    return (
+      <>
+        <Animated.View 
+          style={[
+            styles.blueBlock1,
+            {
+              transform: [{ translateY: block1TranslateY }],
+              opacity
+            }
+          ]} 
+        />
+        <Animated.View 
+          style={[
+            styles.blueBlock2,
+            {
+              transform: [{ translateY: block2TranslateY }],
+              opacity: opacity.interpolate({
+                inputRange: [0.6, 1],
+                outputRange: [0.4, 0.8]
+              })
+            }
+          ]} 
+        />
+        <Animated.View 
+          style={[
+            styles.blueBlock3,
+            {
+              transform: [{ translateY: block3TranslateY }],
+              opacity: opacity.interpolate({
+                inputRange: [0.6, 1],
+                outputRange: [0.2, 0.5]
+              })
+            }
+          ]} 
+        />
+      </>
+    );
+  };
+
+  // Card Background with only circles (removed all patterns)
+  const CardBackground = ({ accentColor = COLORS.primary }) => (
+    <View style={[styles.cardBackground, { backgroundColor: COLORS.cardBlue1 }]}>
+      {/* Decorative circles only */}
+      <View style={[styles.cardDecorativeCircle, styles.circle1, { backgroundColor: accentColor }]} />
+      <View style={[styles.cardDecorativeCircle, styles.circle2, { backgroundColor: COLORS.secondary }]} />
+      <View style={[styles.cardDecorativeCircle, styles.circle3, { backgroundColor: COLORS.primaryLight }]} />
+      
+      {/* Floating particles - subtle dots */}
+      <View style={[styles.floatingParticle, styles.particle1, { backgroundColor: accentColor }]} />
+      <View style={[styles.floatingParticle, styles.particle2, { backgroundColor: COLORS.primary }]} />
+      <View style={[styles.floatingParticle, styles.particle3, { backgroundColor: COLORS.purple }]} />
+      <View style={[styles.floatingParticle, styles.particle4, { backgroundColor: COLORS.teal }]} />
+    </View>
+  );
+
+  // Enhanced Header with UK pattern (keeping header pattern as it's not on cards)
+  const Header = () => (
+    <View style={styles.headerWrapper}>
+      {/* Semicircle Background */}
+      <View style={styles.semicircleBackground}>
+        <View style={styles.semicircle} />
+      </View>
+      
+      {/* UK-style Rounded Lines Pattern (only in header) */}
+      <View style={styles.ukPatternContainer}>
+        <View style={styles.curvedLine1} />
+        <View style={styles.curvedLine2} />
+        <View style={styles.curvedLine3} />
+        
+        <View style={styles.parallelLines}>
+          <View style={styles.parallelLine} />
+          <View style={styles.parallelLine} />
+          <View style={styles.parallelLine} />
+        </View>
+        
+        <View style={styles.dottedCircle1}>
+          {[...Array(8)].map((_, i) => (
+            <View 
+              key={i} 
+              style={[
+                styles.dottedCircleDot,
+                {
+                  transform: [
+                    { rotate: `${i * 45}deg` },
+                    { translateX: 30 }
+                  ]
+                }
+              ]} 
+            />
+          ))}
+        </View>
+        
+        <View style={styles.decorativeDot1} />
+        <View style={styles.decorativeDot2} />
+        <View style={styles.decorativeLine1} />
+        <View style={styles.decorativeLine2} />
+      </View>
+
+      {/* Header Content */}
+      <View style={styles.headerContent}>
+        <View style={styles.headerTopRow}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Icon name="arrow-back" size={22} color={COLORS.primary} />
+          </TouchableOpacity>
+          
+          <Text style={styles.headerTitle}>My Profile</Text>
+          
+          <TouchableOpacity
+            style={styles.notificationButton}
+            onPress={openNotificationModal}
+          >
+            <Icon name="notifications-outline" size={22} color={COLORS.primary} />
+            {notifications.length > 0 && (
+              <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                  {notifications.length > 99 ? '99+' : notifications.length}
+                </Text>
+              </View>
+            )}
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.headerSubtitle}>Manage your account settings</Text>
+      </View>
+    </View>
+  );
+
   const animateButton = () => {
     Animated.sequence([
       Animated.timing(scaleAnim, {
@@ -98,93 +289,79 @@ const Profile = ({ onLogout, navigation }) => {
     ]).start();
   };
 
- const requestPermissions = async () => {
-  if (Platform.OS === 'android') {
-    try {
-      // For Android 13+ (API level 33+), we need to request different permissions
-      const androidVersion = Platform.Version;
-      
-      let permissions = [];
-      let permissionKeys = [];
-      
-      if (androidVersion >= 33) {
-        // Android 13+ uses new permission model
-        permissions = [
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
-        ];
-        permissionKeys = ['camera', 'readMediaImages'];
-      } else {
-        // Android < 13 uses old permission model
-        permissions = [
-          PermissionsAndroid.PERMISSIONS.CAMERA,
-          PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
-          PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
-        ];
-        permissionKeys = ['camera', 'readExternalStorage', 'writeExternalStorage'];
-      }
-      
-      // First, check which permissions are already granted
-      const checks = await Promise.all(
-        permissions.map(permission => PermissionsAndroid.check(permission))
-      );
-      
-      const allGranted = checks.every(check => check === true);
-      
-      if (allGranted) {
-        console.log("All permissions already granted");
-        return; // All permissions are already granted, no need to request
-      }
-      
-      // Request only the permissions that aren't granted
-      const permissionsToRequest = permissions.filter((_, index) => !checks[index]);
-      
-      if (permissionsToRequest.length === 0) {
-        return; // All permissions are granted
-      }
-      
-      const results = await PermissionsAndroid.requestMultiple(permissionsToRequest);
-      
-      // Check if all requested permissions are granted
-      const requestedGranted = Object.values(results).every(
-        result => result === PermissionsAndroid.RESULTS.GRANTED
-      );
-      
-      if (!requestedGranted) {
-        // Check if user denied permanently (shouldShowRequestPermissionRationale returns false)
-        const cameraRationale = await PermissionsAndroid.shouldShowRequestPermissionRationale(
-          PermissionsAndroid.PERMISSIONS.CAMERA
+  const requestPermissions = async () => {
+    if (Platform.OS === 'android') {
+      try {
+        const androidVersion = Platform.Version;
+        
+        let permissions = [];
+        
+        if (androidVersion >= 33) {
+          permissions = [
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+            PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES,
+          ];
+        } else {
+          permissions = [
+            PermissionsAndroid.PERMISSIONS.CAMERA,
+            PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE,
+            PermissionsAndroid.PERMISSIONS.WRITE_EXTERNAL_STORAGE,
+          ];
+        }
+        
+        const checks = await Promise.all(
+          permissions.map(permission => PermissionsAndroid.check(permission))
         );
         
-        // Only show alert if user denied permanently
-        if (!cameraRationale) {
-          Alert.alert(
-            "Permission Required",
-            "This app needs camera and photo library access to update your profile picture. Please enable permissions in app settings.",
-            [
-              {
-                text: "Cancel",
-                style: "cancel"
-              },
-              {
-                text: "Open Settings",
-                onPress: () => {
-                  if (Platform.OS === 'android') {
-                    Linking.openSettings();
+        const allGranted = checks.every(check => check === true);
+        
+        if (allGranted) {
+          return;
+        }
+        
+        const permissionsToRequest = permissions.filter((_, index) => !checks[index]);
+        
+        if (permissionsToRequest.length === 0) {
+          return;
+        }
+        
+        const results = await PermissionsAndroid.requestMultiple(permissionsToRequest);
+        
+        const requestedGranted = Object.values(results).every(
+          result => result === PermissionsAndroid.RESULTS.GRANTED
+        );
+        
+        if (!requestedGranted) {
+          const cameraRationale = await PermissionsAndroid.shouldShowRequestPermissionRationale(
+            PermissionsAndroid.PERMISSIONS.CAMERA
+          );
+          
+          if (!cameraRationale) {
+            Alert.alert(
+              "Permission Required",
+              "This app needs camera and photo library access to update your profile picture. Please enable permissions in app settings.",
+              [
+                {
+                  text: "Cancel",
+                  style: "cancel"
+                },
+                {
+                  text: "Open Settings",
+                  onPress: () => {
+                    if (Platform.OS === 'android') {
+                      Linking.openSettings();
+                    }
                   }
                 }
-              }
-            ]
-          );
+              ]
+            );
+          }
         }
+      } catch (err) {
+        console.warn("Permission error:", err);
       }
-    } catch (err) {
-      console.warn("Permission error:", err);
-      // Don't show alert for permission errors during initial check
     }
-  }
-  // iOS handles permissions differently - image picker will prompt when needed
-};
+  };
 
   const onRefresh = React.useCallback(() => {
     setRefreshing(true);
@@ -292,7 +469,6 @@ const Profile = ({ onLogout, navigation }) => {
       const token = await AsyncStorage.getItem("token");
       const formDataToSend = new FormData();
 
-      // Only send name (email and mobile are not editable)
       formDataToSend.append("name", formData.name);
 
       if (imageUri && 
@@ -402,8 +578,8 @@ const Profile = ({ onLogout, navigation }) => {
 
   const renderNotificationItem = ({ item }) => (
     <View style={styles.notificationItem}>
-      <View style={styles.notificationIcon}>
-        <Icon name="notifications" size={20} color={ACCENT_COLOR} />
+      <View style={[styles.notificationIcon, { backgroundColor: `${COLORS.primary}15` }]}>
+        <Icon name="notifications" size={18} color={COLORS.primary} />
       </View>
       <View style={styles.notificationContent}>
         <Text style={styles.notificationTitle}>{item.title || "New Update"}</Text>
@@ -417,63 +593,49 @@ const Profile = ({ onLogout, navigation }) => {
     </View>
   );
 
+  const handleScroll = Animated.event(
+    [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+    { useNativeDriver: false }
+  );
+
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color={ACCENT_COLOR} />
-        <Text style={styles.loadingText}>Loading Profile...</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={COLORS.primary} />
+          <Text style={styles.loadingText}>Loading Profile...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
+      
+      {/* Animated Color Blocks */}
+      <AnimatedBackground />
+
       <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
-        <ScrollView
+        <Animated.ScrollView
           showsVerticalScrollIndicator={false}
+          onScroll={handleScroll}
+          scrollEventThrottle={16}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor={ACCENT_COLOR}
-              colors={[ACCENT_COLOR]}
+              tintColor={COLORS.primary}
+              colors={[COLORS.primary]}
             />
           }
         >
-          {/* HEADER - Blue Background */}
-          <View style={styles.header}>
-            <View style={styles.headerContent}>
-              <View style={styles.headerTopRow}>
-                <TouchableOpacity
-                  style={styles.backButton}
-                  onPress={() => navigation.goBack()}
-                >
-                  <Icon name="arrow-back" size={24} color={ACCENT_COLOR} />
-                </TouchableOpacity>
-                
-                <Text style={styles.headerTitle}>My Profile</Text>
-                
-                <TouchableOpacity
-                  style={styles.notificationButton}
-                  onPress={openNotificationModal}
-                >
-                  <Icon name="notifications-outline" size={24} color={ACCENT_COLOR} />
-                  {notifications.length > 0 && (
-                    <View style={styles.badge}>
-                      <Text style={styles.badgeText}>
-                        {notifications.length > 99 ? '99+' : notifications.length}
-                      </Text>
-                    </View>
-                  )}
-                </TouchableOpacity>
-              </View>
-              <Text style={styles.headerSubtitle}>Manage your account settings</Text>
-            </View>
-          </View>
+          {/* Enhanced Header */}
+          <Header />
 
           {/* PROFILE CARD */}
           <View style={styles.profileCard}>
-            <View style={styles.profilePattern} />
+            <CardBackground accentColor={COLORS.primary} />
             
             <View style={styles.profileHeader}>
               <TouchableOpacity
@@ -494,8 +656,8 @@ const Profile = ({ onLogout, navigation }) => {
                   onError={() => setImageUri(null)}
                 />
                 {editMode && (
-                  <View style={styles.editImageBadge}>
-                    <Icon name="camera" size={16} color={WHITE} />
+                  <View style={[styles.editImageBadge, { backgroundColor: COLORS.primary }]}>
+                    <Icon name="camera" size={14} color="#FFFFFF" />
                   </View>
                 )}
               </TouchableOpacity>
@@ -507,19 +669,22 @@ const Profile = ({ onLogout, navigation }) => {
                     value={formData.name}
                     onChangeText={(text) => handleInputChange("name", text)}
                     placeholder="Enter your name"
-                    placeholderTextColor={LIGHT_ACCENT}
+                    placeholderTextColor={COLORS.textLight}
                   />
                 </View>
               ) : (
                 <View style={styles.nameContainer}>
                   <Text style={styles.userName}>{user?.name || "Guest User"}</Text>
-                  <Text style={styles.userRole}>Premium Member</Text>
+                  <View style={[styles.userRoleBadge, { backgroundColor: `${COLORS.primary}15` }]}>
+                    <Icon name="star" size={12} color={COLORS.primary} />
+                    <Text style={[styles.userRole, { color: COLORS.primary }]}>Premium Member</Text>
+                  </View>
                 </View>
               )}
 
               <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
                 <TouchableOpacity
-                  style={[styles.editButton, editMode && styles.saveButton]}
+                  style={[styles.editButton, editMode && { backgroundColor: COLORS.green }]}
                   onPress={() => {
                     animateButton();
                     if (editMode) {
@@ -530,14 +695,13 @@ const Profile = ({ onLogout, navigation }) => {
                   }}
                   disabled={saving}
                 >
-                  <View style={styles.glassEffectOverlay} />
                   <Icon 
                     name={editMode ? "checkmark" : "pencil"} 
-                    size={18} 
-                    color={WHITE} 
+                    size={16} 
+                    color="#FFFFFF" 
                   />
                   <Text style={styles.editButtonText}>
-                    {saving ? "Saving..." : editMode ? "Save" : "Edit Profile"}
+                    {saving ? "Saving..." : editMode ? "Save Changes" : "Edit Profile"}
                   </Text>
                 </TouchableOpacity>
               </Animated.View>
@@ -559,27 +723,26 @@ const Profile = ({ onLogout, navigation }) => {
                     }
                   }}
                 >
-                  <Icon name="close" size={18} color={LIGHT_ACCENT} />
+                  <Icon name="close" size={16} color={COLORS.textLight} />
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
               )}
             </View>
           </View>
 
-          {/* ACCOUNT INFORMATION - Email and Mobile are READ ONLY */}
+          {/* ACCOUNT INFORMATION */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Icon name="person-circle" size={22} color={ACCENT_COLOR} />
+              <Icon name="person-circle" size={20} color={COLORS.primary} />
               <Text style={styles.sectionTitle}>Account Information</Text>
             </View>
             
             <View style={styles.infoCard}>
-              <View style={styles.infoPattern} />
+              <CardBackground accentColor={COLORS.purple} />
               
-              {/* Email - Always Read Only */}
               <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Icon name="mail" size={16} color={ACCENT_COLOR} />
+                <View style={[styles.infoIcon, { backgroundColor: `${COLORS.primary}15` }]}>
+                  <Icon name="mail" size={16} color={COLORS.primary} />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Email Address</Text>
@@ -587,10 +750,11 @@ const Profile = ({ onLogout, navigation }) => {
                 </View>
               </View>
               
-              {/* Mobile - Always Read Only */}
+              <View style={styles.infoDivider} />
+              
               <View style={styles.infoRow}>
-                <View style={styles.infoIcon}>
-                  <Icon name="phone-portrait" size={16} color={ACCENT_COLOR} />
+                <View style={[styles.infoIcon, { backgroundColor: `${COLORS.purple}15` }]}>
+                  <Icon name="phone-portrait" size={16} color={COLORS.purple} />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoLabel}>Mobile Number</Text>
@@ -604,50 +768,57 @@ const Profile = ({ onLogout, navigation }) => {
           {!editMode && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Icon name="stats-chart" size={22} color={ACCENT_COLOR} />
+                <Icon name="stats-chart" size={20} color={COLORS.primary} />
                 <Text style={styles.sectionTitle}>Stats & Referral</Text>
               </View>
               
               <View style={styles.statsCard}>
-                <View style={styles.statsPattern} />
+                <CardBackground accentColor={COLORS.teal} />
                 
                 <View style={styles.statsGrid}>
                   <View style={styles.statItem}>
-                    <View style={styles.statIconContainer}>
-                      <Icon name="gift" size={20} color={ACCENT_COLOR} />
+                    <View style={[styles.statIconContainer, { backgroundColor: `${COLORS.primary}15` }]}>
+                      <Icon name="gift" size={20} color={COLORS.primary} />
                     </View>
                     <Text style={styles.statLabel}>Referral Code</Text>
-                    <Text style={styles.statValue}>{user?.referral_code || "N/A"}</Text>
+                    <View style={styles.statValueContainer}>
+                      <Text style={styles.statValue}>{user?.referral_code || "N/A"}</Text>
+                      <TouchableOpacity style={styles.copyButton}>
+                        <Icon name="copy-outline" size={14} color={COLORS.primary} />
+                      </TouchableOpacity>
+                    </View>
                   </View>
                   
                   <View style={styles.statItem}>
-                    <View style={styles.statIconContainer}>
-                      <Icon name="star" size={20} color={ACCENT_COLOR} />
+                    <View style={[styles.statIconContainer, { backgroundColor: `${COLORS.purple}15` }]}>
+                      <Icon name="star" size={20} color={COLORS.purple} />
                     </View>
                     <Text style={styles.statLabel}>Referral Points</Text>
                     <Text style={styles.statValue}>{user?.referral_points || "0"}</Text>
                   </View>
                 </View>
                 
-                <View style={styles.additionalInfo}>
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoIcon}>
-                      <Icon name="shield-checkmark" size={16} color={ACCENT_COLOR} />
-                    </View>
-                    <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Account Status</Text>
-                      <Text style={styles.statusValue}>Active</Text>
+                <View style={styles.infoDivider} />
+                
+                <View style={styles.infoRow}>
+                  <View style={[styles.infoIcon, { backgroundColor: `${COLORS.green}15` }]}>
+                    <Icon name="shield-checkmark" size={16} color={COLORS.green} />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Account Status</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: `${COLORS.green}15` }]}>
+                      <Text style={[styles.statusText, { color: COLORS.green }]}>Active</Text>
                     </View>
                   </View>
-                  
-                  <View style={styles.infoRow}>
-                    <View style={styles.infoIcon}>
-                      <Icon name="people" size={16} color={ACCENT_COLOR} />
-                    </View>
-                    <View style={styles.infoContent}>
-                      <Text style={styles.infoLabel}>Under Referral</Text>
-                      <Text style={styles.infoValue}>{user?.under_referral || "N/A"}</Text>
-                    </View>
+                </View>
+                
+                <View style={styles.infoRow}>
+                  <View style={[styles.infoIcon, { backgroundColor: `${COLORS.orange}15` }]}>
+                    <Icon name="people" size={16} color={COLORS.orange} />
+                  </View>
+                  <View style={styles.infoContent}>
+                    <Text style={styles.infoLabel}>Under Referral</Text>
+                    <Text style={styles.infoValue}>{user?.under_referral || "N/A"}</Text>
                   </View>
                 </View>
               </View>
@@ -658,34 +829,40 @@ const Profile = ({ onLogout, navigation }) => {
           {!editMode && (
             <View style={styles.section}>
               <View style={styles.sectionHeader}>
-                <Icon name="settings" size={22} color={ACCENT_COLOR} />
+                <Icon name="settings" size={20} color={COLORS.primary} />
                 <Text style={styles.sectionTitle}>Settings</Text>
               </View>
               
               <View style={styles.optionsCard}>
+                <CardBackground accentColor={COLORS.orange} />
+                
                 {[
                   { 
                     icon: "ticket", 
                     title: "My Tickets", 
-                    color: ACCENT_COLOR,
+                    description: "View your game tickets",
+                    color: COLORS.primary,
                     onPress: () => handleNavigation('TicketsScreen')
                   },
                   { 
                     icon: "notifications", 
                     title: "Notifications", 
-                    color: ACCENT_COLOR,
+                    description: "View all notifications",
+                    color: COLORS.purple,
                     onPress: openNotificationModal
                   },
                   { 
                     icon: "lock-closed", 
                     title: "Privacy & Security", 
-                    color: ACCENT_COLOR,
+                    description: "Security settings",
+                    color: COLORS.teal,
                     onPress: () => Alert.alert("Coming Soon", "Privacy & Security settings will be available soon!")
                   },
                   { 
                     icon: "help-circle", 
                     title: "Help & Support", 
-                    color: ACCENT_COLOR,
+                    description: "Get help & support",
+                    color: COLORS.orange,
                     onPress: () => Alert.alert("Help & Support", "Contact support@example.com for assistance")
                   },
                 ].map((item, index) => (
@@ -694,18 +871,14 @@ const Profile = ({ onLogout, navigation }) => {
                     style={styles.optionItem}
                     onPress={item.onPress}
                   >
-                    <View style={[styles.optionIcon, { backgroundColor: `${ACCENT_COLOR}15` }]}>
-                      <Icon name={item.icon} size={22} color={ACCENT_COLOR} />
+                    <View style={[styles.optionIcon, { backgroundColor: `${item.color}15` }]}>
+                      <Icon name={item.icon} size={20} color={item.color} />
                     </View>
                     <View style={styles.optionContent}>
                       <Text style={styles.optionTitle}>{item.title}</Text>
-                      <Text style={styles.optionDescription}>
-                        {index === 0 ? "View your game tickets" :
-                         index === 1 ? "View all notifications" :
-                         index === 2 ? "Security settings" : "Get help & support"}
-                      </Text>
+                      <Text style={styles.optionDescription}>{item.description}</Text>
                     </View>
-                    <Icon name="chevron-forward" size={20} color={ACCENT_COLOR} />
+                    <Icon name="chevron-forward" size={18} color={COLORS.textLight} />
                   </TouchableOpacity>
                 ))}
               </View>
@@ -717,16 +890,15 @@ const Profile = ({ onLogout, navigation }) => {
             style={styles.logoutButton}
             onPress={logoutUser}
           >
-            <View style={styles.glassEffectOverlay} />
-            <View style={styles.logoutIcon}>
-              <Icon name="log-out" size={22} color={WHITE} />
+            <View style={[styles.logoutIcon, { backgroundColor: `${COLORS.red}20` }]}>
+              <Icon name="log-out" size={20} color={COLORS.red} />
             </View>
             <Text style={styles.logoutText}>Logout</Text>
           </TouchableOpacity>
 
           {/* BOTTOM SPACE */}
           <View style={styles.bottomSpace} />
-        </ScrollView>
+        </Animated.ScrollView>
       </Animated.View>
 
       {/* IMAGE SELECTION MODAL */}
@@ -738,7 +910,7 @@ const Profile = ({ onLogout, navigation }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalPattern} />
+            <CardBackground accentColor={COLORS.primary} />
             
             <Text style={styles.modalTitle}>Update Profile Picture</Text>
             <Text style={styles.modalSubtitle}>Choose how you want to update your profile picture</Text>
@@ -747,8 +919,8 @@ const Profile = ({ onLogout, navigation }) => {
               style={styles.modalOption}
               onPress={() => handleImagePick("camera")}
             >
-              <View style={styles.modalOptionIcon}>
-                <Icon name="camera" size={24} color={ACCENT_COLOR} />
+              <View style={[styles.modalOptionIcon, { backgroundColor: `${COLORS.primary}15` }]}>
+                <Icon name="camera" size={22} color={COLORS.primary} />
               </View>
               <View style={styles.modalOptionContent}>
                 <Text style={styles.modalOptionTitle}>Take Photo</Text>
@@ -760,8 +932,8 @@ const Profile = ({ onLogout, navigation }) => {
               style={styles.modalOption}
               onPress={() => handleImagePick("gallery")}
             >
-              <View style={styles.modalOptionIcon}>
-                <Icon name="images" size={24} color={ACCENT_COLOR} />
+              <View style={[styles.modalOptionIcon, { backgroundColor: `${COLORS.purple}15` }]}>
+                <Icon name="images" size={22} color={COLORS.purple} />
               </View>
               <View style={styles.modalOptionContent}>
                 <Text style={styles.modalOptionTitle}>Choose from Gallery</Text>
@@ -788,16 +960,18 @@ const Profile = ({ onLogout, navigation }) => {
       >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, styles.notificationModalContent]}>
+            <CardBackground accentColor={COLORS.primary} />
+            
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Notifications</Text>
               <TouchableOpacity onPress={() => setNotificationModalVisible(false)}>
-                <Icon name="close" size={24} color={ACCENT_COLOR} />
+                <Icon name="close" size={22} color={COLORS.text} />
               </TouchableOpacity>
             </View>
 
             {loadingNotifications ? (
               <View style={styles.loadingContainerModal}>
-                <ActivityIndicator size="large" color={ACCENT_COLOR} />
+                <ActivityIndicator size="large" color={COLORS.primary} />
                 <Text style={styles.loadingTextModal}>Loading notifications...</Text>
               </View>
             ) : notifications.length > 0 ? (
@@ -806,25 +980,19 @@ const Profile = ({ onLogout, navigation }) => {
                 renderItem={renderNotificationItem}
                 keyExtractor={(item, index) => index.toString()}
                 showsVerticalScrollIndicator={false}
-                ListEmptyComponent={
-                  <View style={styles.emptyNotifications}>
-                    <Icon name="notifications-off" size={50} color={LIGHT_ACCENT} />
-                    <Text style={styles.emptyText}>No notifications yet</Text>
-                  </View>
-                }
+                contentContainerStyle={styles.notificationList}
               />
             ) : (
               <View style={styles.emptyNotifications}>
-                <Icon name="notifications-off" size={50} color={LIGHT_ACCENT} />
+                <Icon name="notifications-off" size={40} color={COLORS.textLight} />
                 <Text style={styles.emptyText}>No notifications yet</Text>
               </View>
             )}
 
             <TouchableOpacity
-              style={styles.closeBtn}
+              style={[styles.closeBtn, { backgroundColor: COLORS.primary }]}
               onPress={() => setNotificationModalVisible(false)}
             >
-              <View style={styles.glassEffectOverlay} />
               <Text style={styles.closeBtnText}>Close</Text>
             </TouchableOpacity>
           </View>
@@ -839,154 +1007,407 @@ export default Profile;
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: PRIMARY_COLOR,
+    backgroundColor: COLORS.background,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: PRIMARY_COLOR,
+    backgroundColor: COLORS.background,
   },
   loadingText: {
-    marginTop: 20,
-    fontSize: 16,
-    color: LIGHT_ACCENT,
+    marginTop: 16,
+    fontSize: 14,
+    color: COLORS.textLight,
     fontWeight: "500",
   },
   content: {
     flex: 1,
   },
-  // Header
-  header: {
-    paddingTop: 20,
-    paddingBottom: 20,
-    backgroundColor: SECONDARY_COLOR,
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
-    borderBottomWidth: 2,
-    borderBottomColor: ACCENT_COLOR,
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+  
+  /* COLOR BLOCKS - Animated */
+  blueBlock1: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 280,
+    backgroundColor: COLORS.blockLightBlue,
+    borderBottomLeftRadius: 50,
+    borderBottomRightRadius: 50,
   },
+  blueBlock2: {
+    position: 'absolute',
+    top: 200,
+    left: 0,
+    right: 0,
+    height: 160,
+    backgroundColor: COLORS.blockMediumBlue,
+  },
+  blueBlock3: {
+    position: 'absolute',
+    top: 300,
+    left: 0,
+    right: 0,
+    height: 100,
+    backgroundColor: COLORS.blockDarkBlue,
+    opacity: 0.3,
+  },
+  
+  /* Card Background */
+  cardBackground: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    borderRadius: 20,
+  },
+  
+  /* Decorative circles */
+  cardDecorativeCircle: {
+    position: 'absolute',
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    opacity: 0.08,
+  },
+  circle1: {
+    top: -30,
+    right: -30,
+    width: 150,
+    height: 150,
+    borderRadius: 75,
+  },
+  circle2: {
+    bottom: -20,
+    left: -20,
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    opacity: 0.06,
+  },
+  circle3: {
+    top: '40%',
+    left: '30%',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    opacity: 0.05,
+  },
+  
+  /* Floating particles */
+  floatingParticle: {
+    position: 'absolute',
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    opacity: 0.12,
+  },
+  particle1: {
+    top: 20,
+    right: 40,
+    width: 6,
+    height: 6,
+  },
+  particle2: {
+    bottom: 30,
+    left: 50,
+    width: 5,
+    height: 5,
+  },
+  particle3: {
+    top: '60%',
+    right: 60,
+    width: 7,
+    height: 7,
+  },
+  particle4: {
+    bottom: '20%',
+    left: 80,
+    width: 4,
+    height: 4,
+  },
+  
+  /* Enhanced Header */
+  headerWrapper: {
+    position: 'relative',
+    marginTop: 8,
+    marginBottom: 16,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+  },
+  
+  semicircleBackground: {
+    position: 'absolute',
+    top: -40,
+    right: -30,
+    width: 200,
+    height: 200,
+    overflow: 'hidden',
+  },
+  semicircle: {
+    position: 'absolute',
+    width: 400,
+    height: 200,
+    backgroundColor: COLORS.primaryLight,
+    borderTopLeftRadius: 200,
+    borderTopRightRadius: 200,
+    transform: [{ rotate: '-15deg' }],
+    opacity: 0.3,
+  },
+  
+  ukPatternContainer: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
+  
+  curvedLine1: {
+    position: 'absolute',
+    top: 20,
+    right: 50,
+    width: 80,
+    height: 40,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderTopWidth: 0,
+    borderRightWidth: 0,
+    borderRadius: 40,
+    opacity: 0.15,
+    transform: [{ rotate: '-10deg' }],
+  },
+  curvedLine2: {
+    position: 'absolute',
+    bottom: 10,
+    left: 30,
+    width: 60,
+    height: 30,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderBottomWidth: 0,
+    borderLeftWidth: 0,
+    borderRadius: 30,
+    opacity: 0.15,
+    transform: [{ rotate: '15deg' }],
+  },
+  curvedLine3: {
+    position: 'absolute',
+    top: 40,
+    left: 100,
+    width: 100,
+    height: 50,
+    borderWidth: 2,
+    borderColor: COLORS.primary,
+    borderTopWidth: 0,
+    borderLeftWidth: 0,
+    borderRadius: 50,
+    opacity: 0.1,
+    transform: [{ rotate: '20deg' }],
+  },
+  
+  parallelLines: {
+    position: 'absolute',
+    top: 30,
+    left: 20,
+  },
+  parallelLine: {
+    width: 80,
+    height: 2,
+    backgroundColor: COLORS.primary,
+    opacity: 0.1,
+    marginVertical: 4,
+    borderRadius: 1,
+  },
+  
+  dottedCircle1: {
+    position: 'absolute',
+    bottom: 20,
+    right: 30,
+    width: 60,
+    height: 60,
+  },
+  dottedCircleDot: {
+    position: 'absolute',
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: COLORS.primary,
+    opacity: 0.2,
+    top: 28,
+    left: 28,
+  },
+  
+  decorativeDot1: {
+    position: 'absolute',
+    top: 60,
+    right: 80,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: COLORS.primary,
+    opacity: 0.2,
+  },
+  decorativeDot2: {
+    position: 'absolute',
+    bottom: 40,
+    left: 150,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.primary,
+    opacity: 0.15,
+  },
+  decorativeLine1: {
+    position: 'absolute',
+    top: 10,
+    left: 150,
+    width: 40,
+    height: 2,
+    backgroundColor: COLORS.primary,
+    opacity: 0.1,
+    borderRadius: 1,
+    transform: [{ rotate: '30deg' }],
+  },
+  decorativeLine2: {
+    position: 'absolute',
+    bottom: 30,
+    right: 100,
+    width: 50,
+    height: 2,
+    backgroundColor: COLORS.primary,
+    opacity: 0.1,
+    borderRadius: 1,
+    transform: [{ rotate: '-20deg' }],
+  },
+  
   headerContent: {
-    paddingHorizontal: 20,
+    position: 'relative',
+    zIndex: 2,
+    marginTop: 7
   },
   headerTopRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 0,
+    marginBottom: 8,
   },
   backButton: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "rgba(255, 213, 79, 0.1)",
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: "rgba(255, 213, 79, 0.3)",
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   headerTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: TEXT_LIGHT,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    fontSize: 20,
+    fontWeight: "700",
+    color: COLORS.text,
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: LIGHT_ACCENT,
+    fontSize: 13,
+    color: COLORS.textSecondary,
     fontWeight: "500",
-    textAlign: 'center',
-    marginTop: 4,
-    opacity: 0.9,
+    marginLeft: 4,
   },
   notificationButton: {
     position: "relative",
-    padding: 8,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
+    backgroundColor: COLORS.surface,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   badge: {
     position: "absolute",
-    top: 4,
-    right: 4,
-    backgroundColor: WHITE,
+    top: -4,
+    right: -4,
+    backgroundColor: COLORS.red,
     borderRadius: 10,
-    minWidth: 20,
-    height: 20,
+    minWidth: 18,
+    height: 18,
     justifyContent: "center",
     alignItems: "center",
-    borderWidth: 1,
-    borderColor: ACCENT_COLOR,
-    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: COLORS.surface,
+    paddingHorizontal: 3,
   },
   badgeText: {
-    color: SECONDARY_COLOR,
-    fontSize: 10,
+    color: "#FFFFFF",
+    fontSize: 9,
     fontWeight: "700",
   },
+  
+  /* Profile Card */
   profileCard: {
-    backgroundColor: DARK_BLUE,
-    borderRadius: 16,
-    marginHorizontal: 20,
-    padding: 24,
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
-    overflow: 'hidden',
-    position: 'relative',
-    marginTop: 20,
+    borderRadius: 20,
+    marginHorizontal: 16,
     marginBottom: 24,
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
+    padding: 20,
+    position: 'relative',
+    overflow: 'hidden',
+    elevation: 4,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
     shadowRadius: 8,
-    elevation: 6,
-  },
-  profilePattern: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 100,
-    height: 100,
-    borderTopRightRadius: 16,
-    borderBottomLeftRadius: 50,
-    backgroundColor: 'rgba(255, 213, 79, 0.05)',
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   profileHeader: {
     alignItems: "center",
+    zIndex: 2,
   },
   imageContainer: {
     position: 'relative',
     marginBottom: 16,
   },
   profileImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
+    width: 110,
+    height: 110,
+    borderRadius: 55,
     borderWidth: 3,
-    borderColor: ACCENT_COLOR,
-    backgroundColor: SECONDARY_COLOR,
+    borderColor: COLORS.surface,
+    backgroundColor: COLORS.background,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 8,
+    elevation: 4,
   },
   profileImageEdit: {
-    borderWidth: 3,
-    borderColor: ACCENT_COLOR,
+    borderColor: COLORS.primary,
   },
   editImageBadge: {
     position: "absolute",
-    bottom: 5,
-    right: 5,
-    backgroundColor: ACCENT_COLOR,
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    bottom: 2,
+    right: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
     justifyContent: "center",
     alignItems: "center",
     borderWidth: 2,
-    borderColor: WHITE,
+    borderColor: COLORS.surface,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -995,265 +1416,240 @@ const styles = StyleSheet.create({
   },
   nameContainer: {
     alignItems: "center",
-    marginBottom: 20,
+    marginBottom: 16,
   },
   userName: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: "700",
-    color: TEXT_LIGHT,
-    marginBottom: 4,
-    textAlign: "center",
+    color: COLORS.text,
+    marginBottom: 6,
   },
-  userRole: {
-    fontSize: 14,
-    color: ACCENT_COLOR,
-    fontWeight: "600",
-    backgroundColor: "rgba(255, 213, 79, 0.1)",
+  userRoleBadge: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 12,
     paddingVertical: 4,
-    borderRadius: 12,
+    borderRadius: 20,
+    gap: 4,
+  },
+  userRole: {
+    fontSize: 12,
+    fontWeight: "600",
   },
   nameInputContainer: {
     width: '100%',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   nameInput: {
-    fontSize: 20,
-    fontWeight: "700",
-    color: TEXT_LIGHT,
+    fontSize: 18,
+    fontWeight: "600",
+    color: COLORS.text,
     textAlign: "center",
-    borderBottomWidth: 2,
-    borderBottomColor: ACCENT_COLOR,
-    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    paddingVertical: 10,
     paddingHorizontal: 16,
-    backgroundColor: SECONDARY_COLOR,
-    borderRadius: 8,
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
   },
   editButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: ACCENT_COLOR,
-    paddingHorizontal: 20,
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 24,
     paddingVertical: 12,
     borderRadius: 12,
     gap: 8,
-    shadowColor: ACCENT_COLOR,
+    shadowColor: COLORS.primary,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
-    elevation: 4,
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  glassEffectOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(255, 255, 255, 0.2)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255, 255, 255, 0.4)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0, 0, 0, 0.2)',
-    borderRadius: 12,
-  },
-  saveButton: {
-    backgroundColor: "#28A745",
-    shadowColor: "#28A745",
+    elevation: 3,
   },
   editButtonText: {
-    color: SECONDARY_COLOR,
-    fontWeight: "700",
+    color: "#FFFFFF",
+    fontWeight: "600",
     fontSize: 14,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
   },
   cancelButton: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    paddingHorizontal: 20,
+    paddingVertical: 8,
     borderRadius: 8,
     gap: 6,
     marginTop: 12,
   },
   cancelButtonText: {
-    color: LIGHT_ACCENT,
+    color: COLORS.textLight,
     fontWeight: "500",
     fontSize: 13,
-    opacity: 0.9,
   },
+  
+  /* Section */
   section: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     marginBottom: 24,
   },
   sectionHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    marginBottom: 16,
+    gap: 8,
+    marginBottom: 12,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: "800",
-    color: ACCENT_COLOR,
+    fontSize: 16,
+    fontWeight: "600",
+    color: COLORS.text,
   },
+  
+  /* Info Card */
   infoCard: {
-    backgroundColor: DARK_BLUE,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
-    overflow: 'hidden',
+    borderRadius: 16,
+    padding: 16,
     position: 'relative',
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  infoPattern: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    width: 60,
-    height: 60,
-    borderBottomLeftRadius: 12,
-    borderTopRightRadius: 20,
-    backgroundColor: 'rgba(255, 213, 79, 0.02)',
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   infoRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 213, 79, 0.1)",
+    paddingVertical: 8,
+    zIndex: 2,
   },
   infoIcon: {
     width: 36,
     height: 36,
-    borderRadius: 18,
-    backgroundColor: "rgba(255, 213, 79, 0.1)",
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
   },
   infoContent: {
     flex: 1,
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
   },
   infoLabel: {
     fontSize: 12,
-    color: LIGHT_ACCENT,
-    marginBottom: 2,
+    color: COLORS.textLight,
     fontWeight: "500",
-    opacity: 0.9,
   },
   infoValue: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: TEXT_LIGHT,
-  },
-  statusValue: {
     fontSize: 14,
     fontWeight: "600",
-    color: ACCENT_COLOR,
-    backgroundColor: "rgba(255, 213, 79, 0.1)",
+    color: COLORS.text,
+  },
+  infoDivider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 4,
+  },
+  
+  /* Status Badge */
+  statusBadge: {
     paddingHorizontal: 8,
     paddingVertical: 2,
     borderRadius: 6,
-    alignSelf: 'flex-start',
   },
+  statusText: {
+    fontSize: 11,
+    fontWeight: "600",
+  },
+  
+  /* Stats Card */
   statsCard: {
-    backgroundColor: DARK_BLUE,
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
-    overflow: 'hidden',
+    borderRadius: 16,
+    padding: 16,
     position: 'relative',
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
-  },
-  statsPattern: {
-    position: 'absolute',
-    top: 0,
-    right: 0,
-    width: 40,
-    height: 40,
-    borderTopRightRadius: 12,
-    borderBottomLeftRadius: 20,
-    backgroundColor: 'rgba(255, 213, 79, 0.03)',
+    overflow: 'hidden',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   statsGrid: {
     flexDirection: "row",
     gap: 12,
-    marginBottom: 20,
+    marginBottom: 12,
+    zIndex: 2,
   },
   statItem: {
     flex: 1,
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: COLORS.background,
     borderRadius: 12,
-    padding: 16,
+    padding: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255, 213, 79, 0.1)",
+    borderColor: COLORS.border,
   },
   statIconContainer: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: DARK_BLUE,
+    width: 40,
+    height: 40,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
-    marginBottom: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255, 213, 79, 0.1)",
+    marginBottom: 8,
   },
   statLabel: {
-    fontSize: 12,
-    color: LIGHT_ACCENT,
+    fontSize: 11,
+    color: COLORS.textLight,
     marginBottom: 4,
     fontWeight: "500",
-    textAlign: "center",
-    opacity: 0.9,
+  },
+  statValueContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   statValue: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "700",
-    color: TEXT_LIGHT,
-    textAlign: "center",
+    color: COLORS.text,
   },
-  additionalInfo: {
-    marginTop: 8,
+  copyButton: {
+    padding: 2,
   },
+  
+  /* Options Card */
   optionsCard: {
-    backgroundColor: DARK_BLUE,
-    borderRadius: 12,
+    borderRadius: 16,
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 6,
+    position: 'relative',
+    elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    backgroundColor: COLORS.surface,
   },
   optionItem: {
     flexDirection: "row",
     alignItems: "center",
-    padding: 16,
+    padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 213, 79, 0.1)",
+    borderBottomColor: COLORS.border,
+    zIndex: 2,
+    backgroundColor: COLORS.surface,
   },
   optionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
+    width: 42,
+    height: 42,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
@@ -1262,232 +1658,226 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   optionTitle: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: "600",
-    color: TEXT_LIGHT,
+    color: COLORS.text,
     marginBottom: 2,
   },
   optionDescription: {
-    fontSize: 12,
-    color: LIGHT_ACCENT,
-    opacity: 0.8,
+    fontSize: 11,
+    color: COLORS.textLight,
   },
+  
+  /* Logout Button */
   logoutButton: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#DC3545",
-    marginHorizontal: 20,
-    paddingVertical: 16,
+    backgroundColor: COLORS.surface,
+    marginHorizontal: 16,
+    paddingVertical: 14,
     borderRadius: 12,
-    gap: 12,
+    gap: 10,
     marginTop: 8,
     marginBottom: 24,
-    shadowColor: "#DC3545",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 4,
-    overflow: 'hidden',
-    position: 'relative',
+    borderWidth: 1,
+    borderColor: COLORS.red,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 4,
+    elevation: 2,
   },
   logoutIcon: {
     width: 32,
     height: 32,
-    borderRadius: 16,
-    backgroundColor: "rgba(255, 255, 255, 0.2)",
+    borderRadius: 8,
     justifyContent: "center",
     alignItems: "center",
   },
   logoutText: {
-    color: WHITE,
-    fontWeight: "700",
-    fontSize: 16,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    color: COLORS.red,
+    fontWeight: "600",
+    fontSize: 15,
   },
   bottomSpace: {
     height: 20,
   },
+  
+  /* Modal Styles */
   modalOverlay: {
     flex: 1,
-    backgroundColor: "rgba(0,0,0,0.85)",
+    backgroundColor: "rgba(0,0,0,0.5)",
     justifyContent: "center",
     alignItems: "center",
-    padding: 20,
+    padding: 16,
   },
   modalContent: {
     width: "100%",
-    maxWidth: 400,
-    backgroundColor: DARK_BLUE,
+    maxWidth: 380,
+    backgroundColor: COLORS.surface,
     borderRadius: 20,
-    padding: 24,
+    padding: 20,
     position: 'relative',
     overflow: 'hidden',
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.5,
-    shadowRadius: 20,
-    elevation: 10,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 5,
   },
   notificationModalContent: {
     width: "90%",
-    height: "70%",
+    maxHeight: "80%",
     maxWidth: "none",
-  },
-  modalPattern: {
-    position: 'absolute',
-    top: -40,
-    right: -40,
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: 'rgba(255, 213, 79, 0.05)',
   },
   modalHeader: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginBottom: 15,
+    marginBottom: 16,
+    paddingBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+    zIndex: 2,
   },
   modalTitle: {
-    fontSize: 22,
-    fontWeight: "800",
-    color: ACCENT_COLOR,
-    marginBottom: 8,
+    fontSize: 18,
+    fontWeight: "700",
+    color: COLORS.text,
+    zIndex: 2,
   },
   modalSubtitle: {
-    fontSize: 14,
-    color: LIGHT_ACCENT,
+    fontSize: 13,
+    color: COLORS.textLight,
     textAlign: "center",
-    marginBottom: 24,
-    opacity: 0.8,
+    marginBottom: 20,
+    zIndex: 2,
   },
   modalOption: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: SECONDARY_COLOR,
-    padding: 16,
+    backgroundColor: COLORS.background,
+    padding: 14,
     borderRadius: 12,
-    marginBottom: 12,
+    marginBottom: 10,
     borderWidth: 1,
-    borderColor: "rgba(255, 213, 79, 0.1)",
+    borderColor: COLORS.border,
+    zIndex: 2,
   },
   modalOptionIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 12,
-    backgroundColor: DARK_BLUE,
+    width: 44,
+    height: 44,
+    borderRadius: 10,
     justifyContent: "center",
     alignItems: "center",
     marginRight: 12,
-    borderWidth: 1,
-    borderColor: "rgba(255, 213, 79, 0.1)",
   },
   modalOptionContent: {
     flex: 1,
   },
   modalOptionTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: "600",
-    color: TEXT_LIGHT,
+    color: COLORS.text,
     marginBottom: 2,
   },
   modalOptionDescription: {
-    fontSize: 12,
-    color: LIGHT_ACCENT,
-    opacity: 0.8,
+    fontSize: 11,
+    color: COLORS.textLight,
   },
   modalCancelButton: {
     backgroundColor: "transparent",
-    padding: 16,
+    padding: 14,
     borderRadius: 12,
     alignItems: "center",
     borderWidth: 1,
-    borderColor: "rgba(255, 213, 79, 0.1)",
+    borderColor: COLORS.border,
     marginTop: 8,
+    zIndex: 2,
   },
   modalCancelText: {
-    color: LIGHT_ACCENT,
+    color: COLORS.textLight,
     fontWeight: "600",
-    fontSize: 15,
-    opacity: 0.9,
+    fontSize: 14,
   },
-  // Notification Modal Styles
+  
+  /* Notification Modal */
   notificationItem: {
     flexDirection: "row",
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: "rgba(255, 213, 79, 0.1)",
+    borderBottomColor: COLORS.border,
+    zIndex: 2,
   },
   notificationIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
   },
   notificationContent: {
     flex: 1,
   },
   notificationTitle: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: TEXT_LIGHT,
+    fontSize: 13,
+    fontWeight: "600",
+    color: COLORS.text,
     marginBottom: 2,
   },
   notificationMessage: {
-    fontSize: 13,
-    color: ACCENT_COLOR,
+    fontSize: 11,
+    color: COLORS.textLight,
     marginBottom: 4,
   },
   notificationDate: {
-    fontSize: 11,
-    color: LIGHT_ACCENT,
-    opacity: 0.8,
+    fontSize: 9,
+    color: COLORS.textLight,
+  },
+  notificationList: {
+    paddingBottom: 8,
   },
   emptyNotifications: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
+    zIndex: 2,
   },
   emptyText: {
-    fontSize: 16,
-    color: TEXT_LIGHT,
-    opacity: 0.7,
-    marginTop: 10,
+    fontSize: 13,
+    color: COLORS.textLight,
+    marginTop: 8,
   },
   loadingContainerModal: {
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 40,
+    zIndex: 2,
   },
   loadingTextModal: {
     marginTop: 10,
-    fontSize: 14,
-    color: LIGHT_ACCENT,
+    fontSize: 13,
+    color: COLORS.textLight,
   },
   closeBtn: {
-    backgroundColor: ACCENT_COLOR,
-    padding: 12,
+    padding: 14,
     borderRadius: 12,
     alignItems: "center",
-    marginTop: 15,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-    overflow: 'hidden',
-    position: 'relative',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    marginTop: 16,
+    zIndex: 2,
+    shadowColor: COLORS.primary,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 3,
   },
   closeBtnText: {
-    color: SECONDARY_COLOR,
+    color: "#FFFFFF",
     fontSize: 14,
-    fontWeight: "700",
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
+    fontWeight: "600",
   },
 });

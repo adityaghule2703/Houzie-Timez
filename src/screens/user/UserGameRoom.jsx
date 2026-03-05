@@ -18,6 +18,7 @@ import {
 } from "react-native";
 import {
   Pusher,
+  PusherMember,
   PusherChannel,
   PusherEvent,
 } from '@pusher/pusher-websocket-react-native';
@@ -44,28 +45,66 @@ const CELL_WIDTH =
    CELL_MARGIN * 2 * NUM_COLUMNS) / 
   NUM_COLUMNS;
 
-// Color scheme matching TicketsScreen
-const ROW_COLOR_1 = "#004B54"; // Dark teal for even rows
-const ROW_COLOR_2 = "#00343A"; // Darker teal for odd rows
-const FILLED_CELL_BG = "#D4AF37"; // Gold for filled cells
-const CELL_BORDER_COLOR = "#D4AF37"; // Gold border
-const NUMBER_COLOR = "#00343A"; // Dark teal for numbers
-
-const PRIMARY_COLOR = "#005F6A"; // Main background color
-const SECONDARY_COLOR = "#004B54"; // Dark teal
-const ACCENT_COLOR = "#D4AF37"; // Gold
-const LIGHT_ACCENT = "#F5E6A8"; // Light gold
-const MUTED_GOLD = "#E6D8A2"; // Muted gold for text
-const DARK_TEAL = "#00343A"; // Darker teal
-const LIGHT_TEAL = "#006B78"; // Light teal
-const SUCCESS_GREEN = "#27AE60";
-const ERROR_RED = "#E74C3C";
-const WARNING_ORANGE = "#F39C12";
+// Updated color scheme
+const PRIMARY_COLOR = "#4facfe";
+const ACCENT_COLOR = "#ff9800";
+const BACKGROUND_COLOR = "#f5f8ff";
+const WHITE = "#FFFFFF";
+const TEXT_DARK = "#333333";
+const TEXT_LIGHT = "#777777";
+const BORDER_COLOR = "#EEEEEE";
+const SUCCESS_COLOR = "#4CAF50";
+const ERROR_COLOR = "#E74C3C";
+const WARNING_ORANGE = "#ff9800";
+const UNMARKED_CELL_COLOR = "#9E9E9E";
+const MARKED_CELL_COLOR = "#E74C3C";
 
 // Cell colors for different states
+const ROW_COLOR_1 = "#f0f8ff";
+const ROW_COLOR_2 = "#e6f3ff";
+const FILLED_CELL_BG = UNMARKED_CELL_COLOR;
+const CELL_BORDER_COLOR = PRIMARY_COLOR;
+const NUMBER_COLOR = WHITE;
 const EMPTY_CELL_BG = "transparent";
-const MARKED_CELL_BG = "#E74C3C";
+const MARKED_CELL_BG = MARKED_CELL_COLOR;
 const MARKED_CELL_BORDER = "#C0392B";
+
+// Pattern sequence for sorting
+const PATTERN_SEQUENCE = [
+  { keywords: ['top line', 'topline', 'top-line'] },
+  { keywords: ['middle line', 'middleline', 'middle-line'] },
+  { keywords: ['bottom line', 'bottomline', 'bottom-line'] },
+  { keywords: ['breakfast'] },
+  { keywords: ['lunch'] },
+  { keywords: ['dinner'] },
+  { keywords: ['four corners', '4 corners', 'fourcorners'] },
+  { keywords: ['bamboo'] },
+  { keywords: ['early five', 'early 5', 'earlyfive'] },
+  { keywords: ['non claimers', 'nonclaimers', 'non-claimers'] },
+  { keywords: ['full house', 'fullhouse'] }
+];
+
+// Helper function to sort patterns by sequence
+const sortPatternsBySequence = (patterns) => {
+  if (!patterns || patterns.length === 0) return patterns;
+  
+  const getPatternIndex = (pattern) => {
+    const patternName = (pattern.display_name || pattern.pattern_name || pattern.reward_name || '').toLowerCase();
+    
+    for (let i = 0; i < PATTERN_SEQUENCE.length; i++) {
+      if (PATTERN_SEQUENCE[i].keywords.some(keyword => patternName.includes(keyword))) {
+        return i;
+      }
+    }
+    return PATTERN_SEQUENCE.length;
+  };
+
+  return [...patterns].sort((a, b) => {
+    const aIndex = getPatternIndex(a);
+    const bIndex = getPatternIndex(b);
+    return aIndex - bIndex;
+  });
+};
 
 const UserGameRoom = ({ navigation, route }) => {
   const { gameId, gameName } = route.params;
@@ -121,10 +160,23 @@ const UserGameRoom = ({ navigation, route }) => {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarType, setSnackbarType] = useState('info');
   
-  // Refs
+  // Pusher Refs
+  const pusherRef = useRef(null);
+  const gameChannelRef = useRef(null);
+  
+  // Reconnection Refs
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutRef = useRef(null);
+  const maxReconnectAttempts = 10;
+  
+  // Refs for latest values to avoid stale closures
+  const calledNumbersRef = useRef([]);
+  const claimsRef = useRef([]);
+  const announcedNumbersRef = useRef(new Set()); // Track announced numbers to avoid re-announcing
+  
+  // Other refs
   const lastCalledRef = useRef(null);
   const confettiAnimation = useRef(new Animated.Value(0)).current;
-  const claimsRef = useRef([]);
   const menuRefs = useRef([]);
   const lastApprovedClaimRef = useRef(null);
   const audioEnabled = useRef(true);
@@ -134,15 +186,12 @@ const UserGameRoom = ({ navigation, route }) => {
   const announcedClaimIds = useRef(new Set());
   const isSubmittingClaimRef = useRef(false);
   const snackbarTimeout = useRef(null);
-  const pusherRef = useRef(null);
-  const gameStatusChannelRef = useRef(null);
-  const numberCallingChannelRef = useRef(null);
-  const claimsChannelRef = useRef(null);
-  const pollingFallbackRef = useRef(null);
-
+  
+  // Animation refs
   const celebrationOpacity = useRef(new Animated.Value(0)).current;
   const celebrationScale = useRef(new Animated.Value(0.5)).current;
   const celebrationTranslateY = useRef(new Animated.Value(50)).current;
+  const [updateTrigger, setUpdateTrigger] = useState(0);
   const confettiTranslateY = useRef([]);
 
   const floatAnim1 = useRef(new Animated.Value(0)).current;
@@ -151,30 +200,28 @@ const UserGameRoom = ({ navigation, route }) => {
   const rotateAnim = useRef(new Animated.Value(0)).current;
   const shineAnim = useRef(new Animated.Value(0)).current;
 
-  // Initialize Pusher and other components
+  // Update refs when state changes
+  useEffect(() => {
+    calledNumbersRef.current = calledNumbers;
+  }, [calledNumbers]);
+
+  useEffect(() => {
+    claimsRef.current = claims;
+  }, [claims]);
+
+  // Initialize app and Pusher
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Initialize Pusher for real-time updates
-        await initializePusher();
-        
-        // Initialize TTS
         await initializeTTS();
-        
-        // Start animations
         startAnimations();
-        
-        // Load sounds
         await loadSounds();
-        
-        // Fetch initial data
+        await initializePusher();
         await fetchInitialData();
-        
         setLoading(false);
       } catch (error) {
         console.log("Error initializing app:", error);
-        showSnackbar("Failed to initialize. Using fallback mode.", 'warning');
-        startPollingFallback();
+        showSnackbar("Failed to initialize. Please try again.", 'error');
         setLoading(false);
       }
     };
@@ -182,9 +229,12 @@ const UserGameRoom = ({ navigation, route }) => {
     initializeApp();
     
     return () => {
-      // Cleanup
       cleanupPusher();
       Tts.stop();
+      
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
       
       if (clickSound) {
         clickSound.release();
@@ -204,215 +254,339 @@ const UserGameRoom = ({ navigation, route }) => {
         clearTimeout(snackbarTimeout.current);
       }
       
-      if (pollingFallbackRef.current) {
-        pollingFallbackRef.current.forEach(interval => clearInterval(interval));
-      }
-      
       stopConfettiAnimation();
       stopWinningCelebration();
       stopAllBlinking();
     };
   }, []);
 
-  // Initialize Pusher
+  // Initialize Pusher with auto-reconnection
   const initializePusher = async () => {
     try {
+      console.log("📱 Initializing Pusher for user game:", gameId);
+      
       const pusher = Pusher.getInstance();
       
       await pusher.init({
-        apiKey: "9c1d16690beded57332a",
-        cluster: "ap2",
+        apiKey: '9c1d16690beded57332a',
+        cluster: 'ap2',
+        forceTLS: true,
+        activityTimeout: 30000,
+        pongTimeout: 30000,
+        onConnectionStateChange: (currentState, previousState) => {
+          console.log(`🔌 Connection state: ${previousState} → ${currentState}`);
+          
+          if (currentState === 'CONNECTED') {
+            console.log('✅ Connected to Pusher');
+            reconnectAttemptsRef.current = 0;
+            if (reconnectTimeoutRef.current) {
+              clearTimeout(reconnectTimeoutRef.current);
+              reconnectTimeoutRef.current = null;
+            }
+          }
+          
+          if (currentState === 'DISCONNECTED') {
+            console.log('❌ Disconnected, scheduling reconnection...');
+            scheduleReconnection();
+          }
+        },
+        onError: (message, code, error) => {
+          console.log(`❌ Pusher error: ${message}`, error);
+          scheduleReconnection();
+        },
+        onEvent: (event) => {
+          console.log(`📨 Event received: ${event.eventName} on ${event.channelName}`);
+          handlePusherEvent(event);
+        },
+        onSubscriptionSucceeded: (channelName, data) => {
+          console.log(`✅ Subscribed to ${channelName}`);
+        },
+        onSubscriptionError: (channelName, message, code, error) => {
+          console.log(`❌ Subscription error for ${channelName}:`, error);
+        }
       });
       
       await pusher.connect();
+      console.log("🚀 Pusher connected");
       
-      // Subscribe to game status channel
-      const gameStatusChannel = await pusher.subscribe({
-        channelName: `game-status-${gameId}`,
+      const gameChannel = await pusher.subscribe({
+        channelName: `game.${gameId}`,
         onEvent: (event) => {
-          console.log("Game status event received:", event);
-          handleGameStatusEvent(event);
+          console.log(`📢 Game channel event: ${event.eventName}`);
         }
       });
-      gameStatusChannelRef.current = gameStatusChannel;
-      
-      // Subscribe to number calling channel
-      const numberCallingChannel = await pusher.subscribe({
-        channelName: `number-calling-${gameId}`,
-        onEvent: (event) => {
-          console.log("Number calling event received:", event);
-          handleNumberCallingEvent(event);
-        }
-      });
-      numberCallingChannelRef.current = numberCallingChannel;
-      
-      // Subscribe to claims channel
-      const claimsChannel = await pusher.subscribe({
-        channelName: `game-claims-${gameId}`,
-        onEvent: (event) => {
-          console.log("Claims event received:", event);
-          handleClaimsEvent(event);
-        }
-      });
-      claimsChannelRef.current = claimsChannel;
+      gameChannelRef.current = gameChannel;
       
       pusherRef.current = pusher;
+      console.log("✅ Pusher initialized successfully");
       
-      console.log("Pusher initialized successfully");
     } catch (error) {
-      console.log("Error initializing Pusher:", error);
+      console.log("❌ Error initializing Pusher:", error);
+      scheduleReconnection();
       throw error;
     }
   };
 
-  // Handle game status events from Pusher
-  const handleGameStatusEvent = (event) => {
-    if (event.eventName === 'game-updated') {
-      try {
-        const data = JSON.parse(event.data);
-        setGameStatus(data.game);
-        
-        if (data.game?.status === 'completed') {
-          checkGameCompletion();
-        }
-      } catch (error) {
-        console.log("Error parsing game status event:", error);
-      }
+  const scheduleReconnection = () => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+    
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.log('⚠️ Max reconnection attempts reached');
+      return;
+    }
+    
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+    console.log(`🔄 Scheduling reconnection attempt ${reconnectAttemptsRef.current + 1} in ${delay}ms`);
+    
+    reconnectTimeoutRef.current = setTimeout(() => {
+      reconnectPusher();
+    }, delay);
+  };
+
+  const reconnectPusher = async () => {
+    try {
+      console.log('🔄 Attempting to reconnect Pusher...');
+      reconnectAttemptsRef.current += 1;
+      
+      await cleanupPusher();
+      await initializePusher();
+      
+      reconnectAttemptsRef.current = 0;
+      console.log('✅ Reconnected successfully');
+      await fetchInitialData();
+      
+    } catch (error) {
+      console.log('❌ Reconnection failed:', error);
+      scheduleReconnection();
     }
   };
 
-  // Handle number calling events from Pusher
-  const handleNumberCallingEvent = (event) => {
-    if (event.eventName === 'number-called') {
-      try {
-        const data = JSON.parse(event.data);
-        const newNumber = data.number;
-        
-        if (newNumber && !calledNumbers.includes(newNumber)) {
-          const updatedNumbers = [...calledNumbers, newNumber];
-          setCalledNumbers(updatedNumbers);
-          
-          // Announce new number
-          if (audioEnabled.current) {
-            setTimeout(() => {
-              speakNumber(newNumber);
-            }, 500);
-          }
-          
-          // Update last called ref
-          lastCalledRef.current = newNumber;
-        }
-      } catch (error) {
-        console.log("Error parsing number calling event:", error);
-      }
-    }
-  };
-
-  // Handle claims events from Pusher
-  const handleClaimsEvent = (event) => {
-    if (event.eventName === 'claim-submitted' || 
-        event.eventName === 'claim-approved' || 
-        event.eventName === 'claim-rejected') {
-      try {
-        const data = JSON.parse(event.data);
-        const claim = data.claim;
-        
-        if (event.eventName === 'claim-submitted') {
-          showSnackbar(
-            `🎉 ${claim.user_name} submitted a ${claim.reward_name} claim!`,
-            'info'
-          );
-          
-          // Update claims list
-          setClaims(prev => [claim, ...prev.filter(c => c.id !== claim.id)]);
-          
-        } else if (event.eventName === 'claim-approved') {
-          const notification = {
-            type: 'claim_approved',
-            claim: claim,
-            message: `🏆 ${claim.user_name} WON ₹${claim.winning_amount} for ${claim.reward_name}! CONGRATULATIONS! 🎊`
-          };
-          
-          showNotification(notification);
-          startWinnerCelebration(claim);
-          
-        } else if (event.eventName === 'claim-rejected') {
-          showSnackbar(
-            `❌ ${claim.user_name}'s ${claim.reward_name} claim was rejected`,
-            'error'
-          );
-        }
-        
-        // Refresh pattern counts
-        fetchPatternRewardCounts().then(rewardCountsData => {
-          if (rewardCountsData.length > 0) {
-            const patternsWithCounts = rewardCountsData.map(pattern => ({
-              id: pattern.game_pattern_id,
-              pattern_id: pattern.game_pattern_id,
-              pattern_name: pattern.pattern_name,
-              display_name: pattern.reward_name.replace(' Prize', '').replace(/_/g, ' ').split(' ').map(word => 
-                word.charAt(0).toUpperCase() + word.slice(1)
-              ).join(' '),
-              amount: pattern.amount,
-              total_reward_count: pattern.total_reward_count,
-              approved_claims_count: pattern.approved_claims_count,
-              pending_claims_count: pattern.pending_claims_count,
-              available_reward_count: pattern.available_reward_count,
-              is_reward_available: pattern.is_reward_available,
-              reward_name: pattern.reward_name,
-              game_pattern_id: pattern.game_pattern_id
-            }));
-            setMenuPatterns(patternsWithCounts);
-          }
-        });
-        
-      } catch (error) {
-        console.log("Error parsing claims event:", error);
-      }
-    }
-  };
-
-  // Fallback to polling if Pusher fails
-  const startPollingFallback = () => {
-    console.log("Starting polling fallback");
-    
-    const statusInterval = setInterval(fetchGameStatus, 3000);
-    const claimsInterval = setInterval(fetchClaims, 3000);
-    
-    pollingFallbackRef.current = [statusInterval, claimsInterval];
-    
-    return () => {
-      pollingFallbackRef.current.forEach(interval => clearInterval(interval));
-    };
-  };
-
-  // Cleanup Pusher connections
-  const cleanupPusher = () => {
+  const cleanupPusher = async () => {
     if (pusherRef.current) {
       try {
-        if (gameStatusChannelRef.current) {
-          pusherRef.current.unsubscribe({
-            channelName: `game-status-${gameId}`
-          });
+        const pusher = Pusher.getInstance();
+        
+        if (gameChannelRef.current) {
+          await pusher.unsubscribe({ channelName: `game.${gameId}` });
+          gameChannelRef.current = null;
+          console.log("📤 Unsubscribed from game channel");
         }
-        if (numberCallingChannelRef.current) {
-          pusherRef.current.unsubscribe({
-            channelName: `number-calling-${gameId}`
-          });
-        }
-        if (claimsChannelRef.current) {
-          pusherRef.current.unsubscribe({
-            channelName: `game-claims-${gameId}`
-          });
-        }
-        pusherRef.current.disconnect();
+        
+        await pusher.disconnect();
+        console.log("🔌 Pusher disconnected");
       } catch (error) {
-        console.log("Error cleaning up Pusher:", error);
+        console.log("❌ Error cleaning up Pusher:", error);
       }
     }
   };
 
-  // Initialize TTS
+  const handlePusherEvent = (event) => {
+    console.log(`🔄 Processing event: ${event.eventName}`);
+    
+    try {
+      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+      console.log('📦 Event data:', JSON.stringify(data, null, 2));
+      
+      switch (event.eventName) {
+        case 'number.called':
+          handleNumberCalled(data);
+          break;
+        case 'calling.status.updated':
+          handleStatusUpdated(data);
+          break;
+        case 'game.completed':
+          handleGameCompleted(data);
+          break;
+        case 'claim.submitted':
+          handleClaimSubmitted(data);
+          break;
+        case 'claim.approved':
+          handleClaimApproved(data);
+          break;
+        case 'claim.rejected':
+          handleClaimRejected(data);
+          break;
+        default:
+          console.log(`📭 Unhandled event: ${event.eventName}`);
+      }
+    } catch (error) {
+      console.log("❌ Error handling Pusher event:", error);
+    }
+  };
+
+  const handleNumberCalled = (data) => {
+  console.log("🔔 Processing number called event:", data);
+  
+  try {
+    const number = data.number;
+    const calledNumbersList = data.called_numbers || data.sorted_numbers || [];
+    
+    console.log(`🎲 New number called: ${number}`);
+    console.log(`📊 Total called: ${calledNumbersList.length}`);
+    
+    // Update called numbers with the full list from server
+    if (calledNumbersList.length > 0) {
+      setCalledNumbers(calledNumbersList);
+      
+      // Check if this number hasn't been announced before
+      if (!announcedNumbersRef.current.has(number)) {
+        announcedNumbersRef.current.add(number);
+        
+        if (audioEnabled.current) {
+          speakNumber(number);
+        }
+        
+        if (number === 90) {
+          showSnackbar("Number 90 has been called! The game might be ending soon.", 'warning');
+        }
+      }
+      
+      // Force re-render
+      setUpdateTrigger(prev => prev + 1);
+    }
+    
+    // Check if game completed
+    if (calledNumbersList.length >= 90) {
+      checkGameCompletion();
+    }
+    
+  } catch (error) {
+    console.log("❌ Error in handleNumberCalled:", error);
+  }
+};
+
+  const handleStatusUpdated = (data) => {
+    console.log("⏸️ Processing status updated event:", data);
+    
+    try {
+      setCallingStatus(data);
+      setGameStatus(data.game);
+      
+      const statusMessage = data.is_paused ? "Game paused by host" : "Game resumed by host";
+      showSnackbar(statusMessage, data.is_paused ? 'warning' : 'info');
+      
+    } catch (error) {
+      console.log("❌ Error handling status updated:", error);
+    }
+  };
+
+  const handleGameCompleted = (data) => {
+    console.log("🏁 Processing game completed event:", data);
+    
+    setGameCompleted(true);
+    setShowGameEndModal(true);
+    startConfettiAnimation();
+    
+    showSnackbar("Game has been completed!", 'success');
+    
+    if (audioEnabled.current) {
+      setTimeout(() => {
+        Tts.stop();
+        Tts.speak(`Game completed! Thank you for playing ${gameName}!`);
+      }, 1000);
+    }
+  };
+
+  const handleClaimSubmitted = (data) => {
+    console.log("📝 Processing claim submitted event:", data);
+    
+    showSnackbar(`${data.user_name} submitted a ${data.reward_name} claim!`, 'info');
+    
+    fetchClaims();
+    
+    if (audioEnabled.current) {
+      Tts.stop();
+      Tts.speak(`${data.user_name} has submitted a ${data.reward_name} claim!`);
+    }
+  };
+
+  const handleClaimApproved = (data) => {
+    console.log("🏆 Processing claim approved event:", data);
+    
+    const notification = {
+      type: 'claim_approved',
+      claim: data,
+      message: `🏆 ${data.user_name} WON ₹${data.winning_amount} for ${data.reward_name}! CONGRATULATIONS! 🎊`
+    };
+    
+    if (!announcedClaimIds.current.has(data.id)) {
+      announcedClaimIds.current.add(data.id);
+      showNotification(notification);
+    }
+    
+    fetchClaims();
+  };
+
+  const handleClaimRejected = (data) => {
+    console.log("❌ Processing claim rejected event:", data);
+    
+    const notification = {
+      type: 'claim_rejected',
+      claim: data,
+      message: `❌ ${data.user_name}'s ${data.reward_name} claim was rejected`
+    };
+    
+    showNotification(notification);
+    
+    fetchClaims();
+  };
+
+  const fetchInitialData = async () => {
+    await Promise.all([
+      fetchGameStatus(),
+      fetchCalledNumbers(),
+      fetchMyTickets(),
+      checkChatStatus(),
+      fetchClaims(),
+      fetchPatternRewards(),
+      fetchGamePatternsForViewing(),
+    ]);
+  };
+
+  const fetchCalledNumbers = async () => {
+  try {
+    const token = await AsyncStorage.getItem("token");
+    const response = await axios.get(
+      `https://tambolatime.co.in/public/api/user/games/${gameId}/called-numbers`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
+      }
+    );
+
+    if (response.data.success) {
+      const data = response.data.data;
+      const newCalledNumbers = data.called_numbers || [];
+      
+      console.log("📥 Fetched called numbers:", newCalledNumbers);
+      
+      // Update announced numbers set with existing called numbers
+      newCalledNumbers.forEach(num => {
+        announcedNumbersRef.current.add(num);
+      });
+      
+      setCalledNumbers(newCalledNumbers);
+      
+      // Update last called ref
+      if (newCalledNumbers.length > 0) {
+        lastCalledRef.current = newCalledNumbers[newCalledNumbers.length - 1];
+      }
+      
+      // Force re-render
+      setUpdateTrigger(prev => prev + 1);
+      
+      return data;
+    }
+  } catch (error) {
+    console.log("Error fetching called numbers:", error);
+    return null;
+  }
+};
+
   const initializeTTS = async () => {
     try {
       await Tts.getInitStatus();
@@ -437,7 +611,6 @@ const UserGameRoom = ({ navigation, route }) => {
         female: femaleVoice ? femaleVoice.id : englishVoices[1]?.id,
       });
       
-      // Load saved voice preference
       try {
         const savedVoice = await AsyncStorage.getItem('voiceType');
         if (savedVoice) {
@@ -453,19 +626,6 @@ const UserGameRoom = ({ navigation, route }) => {
     setVoiceLoading(false);
   };
 
-  // Fetch initial data
-  const fetchInitialData = async () => {
-    await Promise.all([
-      fetchGameStatus(),
-      fetchMyTickets(),
-      checkChatStatus(),
-      fetchClaims(),
-      fetchPatternRewards(),
-      fetchAllPatternsForViewing(),
-    ]);
-  };
-
-  // Test voice function
   const speak = (gender) => {
     const voiceId = gender === 'male' ? voices.male : voices.female;
     if (voiceId) {
@@ -475,7 +635,6 @@ const UserGameRoom = ({ navigation, route }) => {
     }
   };
 
-  // Update voice settings
   const updateVoiceSettings = async (type) => {
     const voiceId = type === 'male' ? voices.male : voices.female;
     if (voiceId) {
@@ -495,7 +654,6 @@ const UserGameRoom = ({ navigation, route }) => {
     }
   };
 
-  // Speak number with current voice
   const speakNumber = async (number) => {
     if (!audioEnabled.current) return;
     
@@ -574,7 +732,6 @@ const UserGameRoom = ({ navigation, route }) => {
     return numberNames[num] || num.toString();
   };
 
-  // Custom Snackbar functions
   const showSnackbar = (message, type = 'info') => {
     if (snackbarTimeout.current) {
       clearTimeout(snackbarTimeout.current);
@@ -687,11 +844,6 @@ const UserGameRoom = ({ navigation, route }) => {
   const translateY2 = floatAnim2.interpolate({
     inputRange: [0, 1],
     outputRange: [0, -10]
-  });
-
-  const rotate = rotateAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg']
   });
 
   const shineTranslateX = shineAnim.interpolate({
@@ -998,59 +1150,6 @@ const UserGameRoom = ({ navigation, route }) => {
     }
   };
 
-  const fetchAllPatternsForViewing = async () => {
-    try {
-      setLoadingPatterns(true);
-      const token = await AsyncStorage.getItem("token");
-      const response = await axios.get(
-        "https://tambolatime.co.in/public/api/user/patterns/available",
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
-
-      if (response.data.status) {
-        const patterns = response.data.data.patterns || [];
-        
-        const transformedPatterns = patterns.map(pattern => ({
-          ...pattern,
-          display_name: pattern.pattern_name.replace(/_/g, ' ').split(' ').map(word => 
-            word.charAt(0).toUpperCase() + word.slice(1)
-          ).join(' ')
-        }));
-        
-        setAvailablePatterns(transformedPatterns);
-      }
-    } catch (error) {
-      console.log("Error fetching patterns for viewing:", error);
-      showSnackbar("Failed to load patterns", 'error');
-    } finally {
-      setLoadingPatterns(false);
-    }
-  };
-
-  const handleViewPatterns = (ticketId) => {
-    setSelectedTicket(ticketId);
-    setShowPatternsModal(true);
-    
-    fetchAllPatternsForViewing();
-  };
-
-  const handlePatternSelect = (pattern) => {
-    setSelectedPatternForView(pattern);
-    setBlinkingPattern(pattern);
-    setShowPatternsModal(false);
-    
-    showSnackbar(`Showing ${pattern.display_name} pattern on all tickets`, 'info');
-    
-    setTimeout(() => {
-      startBlinkingForAllTickets(pattern, 5000);
-    }, 300);
-  };
-  
   const checkGameCompletion = () => {
     const isNumbersCompleted = calledNumbers.length >= 90;
     const isGameStatusCompleted = gameStatus?.status === 'completed';
@@ -1070,13 +1169,89 @@ const UserGameRoom = ({ navigation, route }) => {
     }
   };
 
+  const fetchGamePatternsForViewing = async () => {
+    try {
+      setLoadingPatterns(true);
+      
+      const token = await AsyncStorage.getItem("token");
+      const response = await axios.get(
+        "https://tambolatime.co.in/public/api/user/games",
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: "application/json",
+          },
+        }
+      );
+
+      if (response.data.success) {
+        const games = response.data.games.data;
+        const currentGame = games.find((game) => game.id === parseInt(gameId));
+
+        if (currentGame && currentGame.pattern_rewards) {
+          const gamePatterns = currentGame.pattern_rewards.map(pattern => ({
+            ...pattern,
+            id: pattern.pattern_id,
+            pattern_id: pattern.pattern_id,
+            pattern_name: pattern.reward_name.toLowerCase().replace(/ /g, '_'),
+            display_name: pattern.reward_name,
+            amount: pattern.amount,
+          }));
+          
+          const sortedPatterns = sortPatternsBySequence(gamePatterns);
+          setAvailablePatterns(sortedPatterns);
+        } else {
+          setAvailablePatterns([]);
+        }
+      }
+    } catch (error) {
+      console.log("Error fetching game patterns for viewing:", error);
+      showSnackbar("Failed to load patterns", 'error');
+      setAvailablePatterns([]);
+    } finally {
+      setLoadingPatterns(false);
+    }
+  };
+
+  const handleViewPatterns = (ticketId) => {
+    setSelectedTicket(ticketId);
+    setShowPatternsModal(true);
+    
+    fetchGamePatternsForViewing();
+  };
+
+  const handlePatternSelect = (pattern) => {
+    setSelectedPatternForView(pattern);
+    setBlinkingPattern(pattern);
+    setShowPatternsModal(false);
+    
+    showSnackbar(`Showing ${pattern.display_name} pattern on all tickets`, 'info');
+    
+    setTimeout(() => {
+      startBlinkingForAllTickets(pattern, 5000);
+    }, 300);
+  };
+
   useEffect(() => {
     checkGameCompletion();
   }, [calledNumbers, gameStatus?.status]);
 
   useEffect(() => {
-    claimsRef.current = claims;
-  }, [claims]);
+    console.log("calledNumbers changed, forcing re-render with value:", calledNumbers);
+    
+    // Update last called ref
+    if (calledNumbers.length > 0) {
+      lastCalledRef.current = calledNumbers[calledNumbers.length - 1];
+    }
+    
+    // Force re-render
+    setUpdateTrigger(prev => prev + 1);
+    
+    // Check if game completed
+    if (calledNumbers.length >= 90) {
+      checkGameCompletion();
+    }
+  }, [calledNumbers]);
 
   const updatePatternCounts = (claimsData) => {
     const ticketPatterns = {};
@@ -1421,7 +1596,9 @@ const UserGameRoom = ({ navigation, route }) => {
                 reward_name: pattern.reward_name,
                 game_pattern_id: pattern.game_pattern_id
               }));
-              setMenuPatterns(patternsWithCounts);
+              
+              const sortedPatterns = sortPatternsBySequence(patternsWithCounts);
+              setMenuPatterns(sortedPatterns);
             }
           }),
         ]);
@@ -1537,7 +1714,9 @@ const UserGameRoom = ({ navigation, route }) => {
           reward_name: pattern.reward_name,
           game_pattern_id: pattern.game_pattern_id
         }));
-        setMenuPatterns(patternsWithCounts);
+        
+        const sortedPatterns = sortPatternsBySequence(patternsWithCounts);
+        setMenuPatterns(sortedPatterns);
       }
     } catch (error) {
       console.log("Error fetching pattern counts:", error);
@@ -1554,11 +1733,12 @@ const UserGameRoom = ({ navigation, route }) => {
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchGameStatus();
+    await fetchCalledNumbers();
     await fetchMyTickets();
     await checkChatStatus();
     await fetchClaims();
     await fetchPatternRewards();
-    await fetchAllPatternsForViewing();
+    await fetchGamePatternsForViewing();
     setRefreshing(false);
   };
 
@@ -1567,7 +1747,7 @@ const UserGameRoom = ({ navigation, route }) => {
       const token = await AsyncStorage.getItem("token");
       
       const response = await axios.get(
-        `https://tambolatime.co.in/public/api/user/games/${gameId}/calling-status`,
+        `https://tambolatime.co.in/public/api/user/games/${gameId}/calling/status`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -1583,7 +1763,6 @@ const UserGameRoom = ({ navigation, route }) => {
         
         setGameStatus(data.game);
         setCallingStatus(data.calling);
-        setCalledNumbers(data.numbers.called_numbers || []);
         
         if (previousGameStatus !== 'completed' && newGameStatus === 'completed') {
           checkGameCompletion();
@@ -1594,15 +1773,36 @@ const UserGameRoom = ({ navigation, route }) => {
     }
   };
 
- const fetchMyTickets = async () => {
-  try {
-    const token = await AsyncStorage.getItem("token");
-    console.log("Fetching tickets for gameId:", gameId);
-    
-    // Option 1: Try this endpoint first (more specific)
+  const fetchMyTickets = async () => {
     try {
-      const response = await axios.get(
-        `https://tambolatime.co.in/public/api/user/games/${gameId}/my-tickets`,
+      const token = await AsyncStorage.getItem("token");
+      console.log("Fetching tickets for gameId:", gameId);
+      
+      try {
+        const response = await axios.get(
+          `https://tambolatime.co.in/public/api/user/games/${gameId}/my-tickets`,
+          { 
+            headers: { 
+              Authorization: `Bearer ${token}`,
+              Accept: "application/json",
+            } 
+          }
+        );
+
+        console.log("Specific game tickets response:", response.data);
+        
+        if (response.data.success) {
+          const tickets = response.data.tickets || response.data.data || [];
+          console.log("Found tickets for this game:", tickets.length);
+          setMyTickets(tickets);
+          return;
+        }
+      } catch (specificError) {
+        console.log("Specific endpoint failed, trying general endpoint:", specificError.message);
+      }
+
+      const res = await axios.get(
+        "https://tambolatime.co.in/public/api/user/my-tickets",
         { 
           headers: { 
             Authorization: `Bearer ${token}`,
@@ -1611,67 +1811,42 @@ const UserGameRoom = ({ navigation, route }) => {
         }
       );
 
-      console.log("Specific game tickets response:", response.data);
+      console.log("All tickets response:", res.data);
       
-      if (response.data.success) {
-        const tickets = response.data.tickets || response.data.data || [];
-        console.log("Found tickets for this game:", tickets.length);
-        setMyTickets(tickets);
-        return;
+      if (res.data.success) {
+        let tickets = [];
+        
+        if (res.data.tickets && res.data.tickets.data) {
+          tickets = res.data.tickets.data;
+        } else if (res.data.data && Array.isArray(res.data.data)) {
+          tickets = res.data.data;
+        } else if (res.data.tickets && Array.isArray(res.data.tickets)) {
+          tickets = res.data.tickets;
+        }
+        
+        console.log("All tickets before filtering:", tickets.length);
+        
+        const gameTickets = tickets.filter((ticket) => {
+          const ticketGameId = ticket.game_id || ticket.game?.id;
+          console.log(`Ticket ${ticket.id}: game_id = ${ticketGameId}, comparing with ${gameId}`);
+          return parseInt(ticketGameId) === parseInt(gameId);
+        });
+        
+        console.log("Filtered tickets for this game:", gameTickets.length);
+        setMyTickets(gameTickets);
+        
+        if (gameTickets.length === 0) {
+          console.log("No tickets found for this game. Available tickets:", tickets);
+        }
+      } else {
+        console.log("API returned success: false", res.data);
       }
-    } catch (specificError) {
-      console.log("Specific endpoint failed, trying general endpoint:", specificError.message);
+    } catch (error) {
+      console.log("Error fetching tickets:", error);
+      console.log("Error response:", error.response?.data);
+      showSnackbar("Failed to load tickets", 'error');
     }
-
-    // Option 2: Fallback to the general endpoint and filter
-    const res = await axios.get(
-      "https://tambolatime.co.in/public/api/user/my-tickets",
-      { 
-        headers: { 
-          Authorization: `Bearer ${token}`,
-          Accept: "application/json",
-        } 
-      }
-    );
-
-    console.log("All tickets response:", res.data);
-    
-    if (res.data.success) {
-      // Check different response structures
-      let tickets = [];
-      
-      if (res.data.tickets && res.data.tickets.data) {
-        tickets = res.data.tickets.data;
-      } else if (res.data.data && Array.isArray(res.data.data)) {
-        tickets = res.data.data;
-      } else if (res.data.tickets && Array.isArray(res.data.tickets)) {
-        tickets = res.data.tickets;
-      }
-      
-      console.log("All tickets before filtering:", tickets.length);
-      
-      // Filter tickets for the current game
-      const gameTickets = tickets.filter((ticket) => {
-        const ticketGameId = ticket.game_id || ticket.game?.id;
-        console.log(`Ticket ${ticket.id}: game_id = ${ticketGameId}, comparing with ${gameId}`);
-        return parseInt(ticketGameId) === parseInt(gameId);
-      });
-      
-      console.log("Filtered tickets for this game:", gameTickets.length);
-      setMyTickets(gameTickets);
-      
-      if (gameTickets.length === 0) {
-        console.log("No tickets found for this game. Available tickets:", tickets);
-      }
-    } else {
-      console.log("API returned success: false", res.data);
-    }
-  } catch (error) {
-    console.log("Error fetching tickets:", error);
-    console.log("Error response:", error.response?.data);
-    showSnackbar("Failed to load tickets", 'error');
-  }
-};
+  };
 
   const checkChatStatus = async () => {
     try {
@@ -1867,88 +2042,92 @@ const UserGameRoom = ({ navigation, route }) => {
   };
 
   const renderAllCalledNumbersSection = () => {
-    const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1);
-    const numberRows = [];
-    for (let i = 0; i < 9; i++) {
-      numberRows.push(allNumbers.slice(i * 10, (i + 1) * 10));
-    }
+  const allNumbers = Array.from({ length: 90 }, (_, i) => i + 1);
+  const numberRows = [];
+  for (let i = 0; i < 9; i++) {
+    numberRows.push(allNumbers.slice(i * 10, (i + 1) * 10));
+  }
 
-    return (
-      <View style={styles.allNumbersCard}>
-        <View style={styles.allNumbersHeader}>
-          <View style={styles.allNumbersTitleContainer}>
-            <MaterialIcons name="format-list-numbered" size={18} color={ACCENT_COLOR} />
-            <Text style={styles.allNumbersTitle}>All Numbers (1-90)</Text>
-            <View style={styles.calledCountBadge}>
-              <Text style={styles.calledCountText}>{calledNumbers.length}/90</Text>
-            </View>
+  const currentCalledNumbers = calledNumbers;
+  
+  console.log("🎨 Rendering all numbers section with called numbers:", currentCalledNumbers);
+  
+  return (
+    <View style={styles.allNumbersCard} key={`all-numbers-${updateTrigger}`}>
+      <View style={styles.allNumbersHeader}>
+        <View style={styles.allNumbersTitleContainer}>
+          <MaterialIcons name="format-list-numbered" size={18} color={ACCENT_COLOR} />
+          <Text style={styles.allNumbersTitle}>All Numbers (1-90)</Text>
+          <View style={styles.calledCountBadge}>
+            <Text style={styles.calledCountText}>{currentCalledNumbers.length}/90</Text>
           </View>
-          
-          <TouchableOpacity
-            style={styles.viewAllGridButton}
-            onPress={handleViewAllCalledNumbers}
-          >
-            <Text style={styles.viewAllGridButtonText}>View All</Text>
-            <Ionicons name="expand" size={14} color={ACCENT_COLOR} />
-          </TouchableOpacity>
         </View>
         
-        <View style={styles.numbersGridCompact}>
-          {numberRows.map((row, rowIndex) => (
-            <View key={`row-${rowIndex}`} style={styles.numberRow}>
-              {row.map((number) => {
-                const isCalled = calledNumbers.includes(number);
-                const isLatest = calledNumbers.length > 0 && 
-                  number === calledNumbers[calledNumbers.length - 1];
-                
-                return (
-                  <TouchableOpacity
-                    key={number}
-                    style={[
-                      styles.numberItemCompact,
-                      isCalled && styles.calledNumberItem,
-                      isLatest && styles.latestNumberItem,
-                    ]}
-                    activeOpacity={0.7}
-                    onPress={() => speakNumber(number)}
-                    onLongPress={() => speakNumber(number)}
-                  >
-                    <Text style={[
-                      styles.numberItemTextCompact,
-                      isCalled && styles.calledNumberText,
-                      isLatest && styles.latestNumberText,
-                    ]}>
-                      {number}
-                    </Text>
-                    {isLatest && (
-                      <View style={styles.latestIndicatorCompact}>
-                        <Ionicons name="star" size={8} color={WARNING_ORANGE} />
-                      </View>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-          ))}
+        <TouchableOpacity
+          style={styles.viewAllGridButton}
+          onPress={handleViewAllCalledNumbers}
+        >
+          <Text style={styles.viewAllGridButtonText}>View All</Text>
+          <Ionicons name="expand" size={14} color={ACCENT_COLOR} />
+        </TouchableOpacity>
+      </View>
+      
+      <View style={styles.numbersGridCompact}>
+        {numberRows.map((row, idx) => (
+          <View key={`row-${idx}-${updateTrigger}`} style={styles.numberRow}>
+            {row.map((number) => {
+              const isCalled = currentCalledNumbers.includes(number);
+              const isLatest = currentCalledNumbers.length > 0 && 
+                number === currentCalledNumbers[currentCalledNumbers.length - 1];
+              
+              return (
+                <TouchableOpacity
+                  key={`${number}-${updateTrigger}`}
+                  style={[
+                    styles.numberItemCompact,
+                    isCalled && styles.calledNumberItem,
+                    isLatest && styles.latestNumberItem,
+                  ]}
+                  activeOpacity={0.7}
+                  onPress={() => speakNumber(number)}
+                  onLongPress={() => speakNumber(number)}
+                >
+                  <Text style={[
+                    styles.numberItemTextCompact,
+                    isCalled && styles.calledNumberText,
+                    isLatest && styles.latestNumberText,
+                  ]}>
+                    {number}
+                  </Text>
+                  {isLatest && (
+                    <View style={styles.latestIndicatorCompact}>
+                      <Ionicons name="star" size={8} color={WHITE} />
+                    </View>
+                  )}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        ))}
+      </View>
+      
+      <View style={styles.legendContainer}>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendColor, styles.legendNormal]} />
+          <Text style={styles.legendText}>Not Called</Text>
         </View>
-        
-        <View style={styles.legendContainer}>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, styles.legendNormal]} />
-            <Text style={styles.legendText}>Not Called</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, styles.legendCalled]} />
-            <Text style={styles.legendText}>Called</Text>
-          </View>
-          <View style={styles.legendItem}>
-            <View style={[styles.legendColor, styles.legendLatest]} />
-            <Text style={styles.legendText}>Latest</Text>
-          </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendColor, styles.legendCalled]} />
+          <Text style={styles.legendText}>Called</Text>
+        </View>
+        <View style={styles.legendItem}>
+          <View style={[styles.legendColor, styles.legendLatest]} />
+          <Text style={styles.legendText}>Latest</Text>
         </View>
       </View>
-    );
-  };
+    </View>
+  );
+};
 
   const renderTicketGrid = (ticketData, ticketId) => {
     const processedData = processTicketData(ticketData);
@@ -1992,11 +2171,11 @@ const UserGameRoom = ({ navigation, route }) => {
               } else if (isMarked) {
                 cellBackgroundColor = MARKED_CELL_BG;
                 cellBorderColor = MARKED_CELL_BORDER;
-                textColor = "#FFFFFF";
+                textColor = WHITE;
               } else {
                 cellBackgroundColor = FILLED_CELL_BG;
                 cellBorderColor = CELL_BORDER_COLOR;
-                textColor = NUMBER_COLOR;
+                textColor = WHITE;
               }
               
               return (
@@ -2039,7 +2218,7 @@ const UserGameRoom = ({ navigation, route }) => {
                             styles.number, 
                             { 
                               color: textColor,
-                              textShadowColor: 'rgba(243, 156, 18, 0.8)',
+                              textShadowColor: 'rgba(255, 152, 0, 0.8)',
                               textShadowOffset: { width: 0, height: 0 },
                               textShadowRadius: 4,
                             }
@@ -2067,7 +2246,7 @@ const UserGameRoom = ({ navigation, route }) => {
     <View style={styles.ticketItemContainer}>
       <View style={styles.ticketHeader}>
         <View style={styles.ticketNumberContainer}>
-          <MaterialIcons name="confirmation-number" size={20} color={ACCENT_COLOR} />
+          <MaterialIcons name="confirmation-number" size={20} color={PRIMARY_COLOR} />
           <View style={styles.ticketInfo}>
             <Text style={styles.ticketLabel}>Ticket #{item.ticket_number}</Text>
           </View>
@@ -2078,7 +2257,7 @@ const UserGameRoom = ({ navigation, route }) => {
             style={styles.viewPatternsButton}
             onPress={() => handleViewPatterns(item.id)}
           >
-            <Ionicons name="eye-outline" size={16} color={ACCENT_COLOR} />
+            <Ionicons name="eye-outline" size={16} color={PRIMARY_COLOR} />
             <Text style={styles.viewPatternsButtonText}>Patterns</Text>
           </TouchableOpacity>
           
@@ -2087,7 +2266,7 @@ const UserGameRoom = ({ navigation, route }) => {
             onPress={() => openMenu(item.id)}
             ref={el => menuRefs.current[index] = el}
           >
-            <Ionicons name="trophy" size={16} color={SECONDARY_COLOR} />
+            <Ionicons name="trophy" size={16} color={WHITE} />
             <Text style={styles.claimButtonText}>Claim</Text>
           </TouchableOpacity>
         </View>
@@ -2144,7 +2323,9 @@ const UserGameRoom = ({ navigation, route }) => {
             reward_name: pattern.reward_name,
             game_pattern_id: pattern.game_pattern_id
           }));
-          setMenuPatterns(patternsWithCounts);
+          
+          const sortedPatterns = sortPatternsBySequence(patternsWithCounts);
+          setMenuPatterns(sortedPatterns);
           showSnackbar("Patterns refreshed successfully", 'info');
         }
       } catch (error) {
@@ -2180,7 +2361,7 @@ const UserGameRoom = ({ navigation, route }) => {
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity onPress={closeMenu}>
-                  <Ionicons name="close" size={24} color={LIGHT_ACCENT} />
+                  <Ionicons name="close" size={24} color={TEXT_LIGHT} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -2223,7 +2404,7 @@ const UserGameRoom = ({ navigation, route }) => {
                         <Ionicons 
                           name={isClaimed ? "checkmark-circle" : (isLimitReached ? "lock-closed" : "trophy-outline")} 
                           size={20} 
-                          color={isClaimed ? SUCCESS_GREEN : (isLimitReached ? ERROR_RED : ACCENT_COLOR)} 
+                          color={isClaimed ? SUCCESS_COLOR : (isLimitReached ? ERROR_COLOR : ACCENT_COLOR)} 
                         />
                         <View style={styles.patternMenuItemInfo}>
                           <Text style={[
@@ -2258,7 +2439,7 @@ const UserGameRoom = ({ navigation, route }) => {
                         ) : (
                           <View style={styles.patternStatusContainer}>
                             {isDisabled && !isClaimed && (
-                              <Ionicons name="lock-closed" size={16} color={ERROR_RED} />
+                              <Ionicons name="lock-closed" size={16} color={ERROR_COLOR} />
                             )}
                           </View>
                         )}
@@ -2293,14 +2474,14 @@ const UserGameRoom = ({ navigation, route }) => {
               <Text style={styles.patternsModalTitle}>Available Patterns</Text>
               <View style={styles.patternsModalHeaderActions}>
                 <TouchableOpacity 
-                  onPress={() => fetchAllPatternsForViewing()}
+                  onPress={() => fetchGamePatternsForViewing()}
                   style={styles.refreshPatternsButton}
                   disabled={loadingPatterns}
                 >
                   {loadingPatterns ? (
-                    <ActivityIndicator size="small" color={LIGHT_ACCENT} />
-                  ) : (
-                    <Ionicons name="refresh" size={20} color={LIGHT_ACCENT} />
+                    <ActivityIndicator size="small" color={TEXT_LIGHT} />
+                                   ) : (
+                    <Ionicons name="refresh" size={20} color={TEXT_LIGHT} />
                   )}
                 </TouchableOpacity>
                 <TouchableOpacity 
@@ -2310,7 +2491,7 @@ const UserGameRoom = ({ navigation, route }) => {
                   }}
                   style={styles.patternsModalCloseButton}
                 >
-                  <Ionicons name="close" size={24} color={LIGHT_ACCENT} />
+                  <Ionicons name="close" size={24} color={TEXT_LIGHT} />
                 </TouchableOpacity>
               </View>
             </View>
@@ -2329,7 +2510,7 @@ const UserGameRoom = ({ navigation, route }) => {
                   style={styles.stopBlinkingButton}
                   onPress={stopAllBlinking}
                 >
-                  <Ionicons name="stop-circle" size={16} color={ERROR_RED} />
+                  <Ionicons name="stop-circle" size={16} color={ERROR_COLOR} />
                   <Text style={styles.stopBlinkingText}>Stop</Text>
                 </TouchableOpacity>
               </View>
@@ -2352,7 +2533,7 @@ const UserGameRoom = ({ navigation, route }) => {
                 {availablePatterns.length === 0 ? (
                   <View style={styles.noAvailablePatternsContainer}>
                     <Ionicons name="alert-circle-outline" size={40} color={WARNING_ORANGE} />
-                    <Text style={styles.noAvailablePatternsText}>No patterns available</Text>
+                    <Text style={styles.noAvailablePatternsText}>No patterns available for this game</Text>
                   </View>
                 ) : (
                   availablePatterns.map((pattern, index) => {
@@ -2382,11 +2563,14 @@ const UserGameRoom = ({ navigation, route }) => {
                             </Text>
                             <Text style={styles.patternListItemDesc} numberOfLines={2}>
                               {getPatternDescription(pattern.pattern_name)}
+                              {pattern.amount && (
+                                <Text style={styles.patternAmountText}> • Prize: ₹{pattern.amount}</Text>
+                              )}
                             </Text>
                           </View>
                           <View style={styles.patternActionContainer}>
                             {isSelected ? (
-                              <Ionicons name="checkmark-circle" size={22} color={SUCCESS_GREEN} />
+                              <Ionicons name="checkmark-circle" size={22} color={SUCCESS_COLOR} />
                             ) : (
                               <Ionicons name="eye" size={18} color={ACCENT_COLOR} />
                             )}
@@ -2407,7 +2591,7 @@ const UserGameRoom = ({ navigation, route }) => {
                   stopAllBlinking();
                 }}
               >
-                <Ionicons name="refresh" size={16} color={MUTED_GOLD} />
+                <Ionicons name="refresh" size={16} color={TEXT_LIGHT} />
                 <Text style={styles.clearSelectionButtonText}>Clear Selection</Text>
               </TouchableOpacity>
               
@@ -2447,7 +2631,7 @@ const UserGameRoom = ({ navigation, route }) => {
                 {
                   left: `${(index * 5) % 100}%`,
                   transform: [{ translateY: anim }],
-                  backgroundColor: [ERROR_RED, ACCENT_COLOR, WARNING_ORANGE, SUCCESS_GREEN][index % 4],
+                  backgroundColor: [ERROR_COLOR, ACCENT_COLOR, WARNING_ORANGE, SUCCESS_COLOR][index % 4],
                 }
               ]}
             />
@@ -2500,9 +2684,9 @@ const UserGameRoom = ({ navigation, route }) => {
   const renderCustomSnackbar = () => {
     if (!snackbarVisible) return null;
 
-    const backgroundColor = snackbarType === 'success' ? SUCCESS_GREEN : 
-                          snackbarType === 'error' ? ERROR_RED : 
-                          snackbarType === 'warning' ? WARNING_ORANGE : ACCENT_COLOR;
+    const backgroundColor = snackbarType === 'success' ? SUCCESS_COLOR : 
+                          snackbarType === 'error' ? ERROR_COLOR : 
+                          snackbarType === 'warning' ? WARNING_ORANGE : PRIMARY_COLOR;
 
     return (
       <Modal
@@ -2519,16 +2703,16 @@ const UserGameRoom = ({ navigation, route }) => {
           <View style={[styles.snackbarContainer, { backgroundColor }]}>
             <View style={styles.snackbarContent}>
               {snackbarType === 'success' && (
-                <Ionicons name="trophy" size={20} color="#FFF" style={styles.snackbarIcon} />
+                <Ionicons name="trophy" size={20} color={WHITE} style={styles.snackbarIcon} />
               )}
               {snackbarType === 'error' && (
-                <Ionicons name="close-circle" size={20} color="#FFF" style={styles.snackbarIcon} />
+                <Ionicons name="close-circle" size={20} color={WHITE} style={styles.snackbarIcon} />
               )}
               {snackbarType === 'warning' && (
-                <Ionicons name="warning" size={20} color="#FFF" style={styles.snackbarIcon} />
+                <Ionicons name="warning" size={20} color={WHITE} style={styles.snackbarIcon} />
               )}
               {snackbarType === 'info' && (
-                <Ionicons name="information-circle" size={20} color="#FFF" style={styles.snackbarIcon} />
+                <Ionicons name="information-circle" size={20} color={WHITE} style={styles.snackbarIcon} />
               )}
               <Text style={styles.snackbarText}>{snackbarMessage}</Text>
             </View>
@@ -2543,9 +2727,9 @@ const UserGameRoom = ({ navigation, route }) => {
       <View style={styles.loadingContainer}>
         <View style={styles.loadingContent}>
           <View style={styles.loadingIconWrapper}>
-            <MaterialIcons name="confirmation-number" size={40} color={ACCENT_COLOR} />
+            <MaterialIcons name="confirmation-number" size={40} color={PRIMARY_COLOR} />
           </View>
-          <ActivityIndicator size="large" color={ACCENT_COLOR} style={styles.loadingSpinner} />
+          <ActivityIndicator size="large" color={PRIMARY_COLOR} style={styles.loadingSpinner} />
           <Text style={styles.loadingText}>Loading Game Room...</Text>
         </View>
       </View>
@@ -2554,7 +2738,7 @@ const UserGameRoom = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor={SECONDARY_COLOR} barStyle="light-content" />
+      <StatusBar backgroundColor={PRIMARY_COLOR} barStyle="light-content" />
 
       <View style={styles.backgroundPattern}>
         <Animated.View 
@@ -2676,7 +2860,7 @@ const UserGameRoom = ({ navigation, route }) => {
                 style={styles.viewWinnersButton}
                 onPress={handleViewWinners}
               >
-                <Ionicons name="trophy" size={20} color={SECONDARY_COLOR} />
+                <Ionicons name="trophy" size={20} color={WHITE} />
                 <Text style={styles.viewWinnersButtonText}>View Winners</Text>
               </TouchableOpacity>
               
@@ -2705,7 +2889,7 @@ const UserGameRoom = ({ navigation, route }) => {
                 onPress={() => setShowVoiceModal(false)}
                 style={styles.modalCloseButton}
               >
-                <Ionicons name="close" size={24} color={MUTED_GOLD} />
+                <Ionicons name="close" size={24} color={TEXT_LIGHT} />
               </TouchableOpacity>
             </View>
             
@@ -2724,11 +2908,11 @@ const UserGameRoom = ({ navigation, route }) => {
                 <Ionicons 
                   name="female" 
                   size={24} 
-                  color={voiceType === 'female' ? ACCENT_COLOR : MUTED_GOLD} 
+                  color={voiceType === 'female' ? ACCENT_COLOR : TEXT_LIGHT} 
                 />
               </View>
               <View style={styles.voiceOptionInfo}>
-                <Text style={styles.voiceOptionName}>Male Voice</Text>
+                <Text style={styles.voiceOptionName}>Female Voice</Text>
                 <Text style={styles.voiceOptionDesc}>Higher pitch, clear pronunciation</Text>
               </View>
               {voiceType === 'female' && (
@@ -2747,11 +2931,11 @@ const UserGameRoom = ({ navigation, route }) => {
                 <Ionicons 
                   name="male" 
                   size={24} 
-                  color={voiceType === 'male' ? ACCENT_COLOR : MUTED_GOLD} 
+                  color={voiceType === 'male' ? ACCENT_COLOR : TEXT_LIGHT} 
                 />
               </View>
               <View style={styles.voiceOptionInfo}>
-                <Text style={styles.voiceOptionName}>Female Voice</Text>
+                <Text style={styles.voiceOptionName}>Male Voice</Text>
                 <Text style={styles.voiceOptionDesc}>Lower pitch, deeper tone</Text>
               </View>
               {voiceType === 'male' && (
@@ -2763,7 +2947,7 @@ const UserGameRoom = ({ navigation, route }) => {
               style={styles.testVoiceButton}
               onPress={() => speak(voiceType)}
             >
-              <Ionicons name="volume-high" size={20} color={SECONDARY_COLOR} />
+              <Ionicons name="volume-high" size={20} color={WHITE} />
               <Text style={styles.testVoiceButtonText}>Test Voice</Text>
             </TouchableOpacity>
           </View>
@@ -2779,8 +2963,8 @@ const UserGameRoom = ({ navigation, route }) => {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={onRefresh}
-            tintColor={ACCENT_COLOR}
-            colors={[ACCENT_COLOR]}
+            tintColor={PRIMARY_COLOR}
+            colors={[PRIMARY_COLOR]}
           />
         }
         contentContainerStyle={styles.scrollContent}
@@ -2801,13 +2985,13 @@ const UserGameRoom = ({ navigation, route }) => {
                 style={styles.backButton}
                 onPress={() => navigation.goBack()}
               >
-                <Ionicons name="arrow-back" size={24} color={ACCENT_COLOR} />
+                <Ionicons name="arrow-back" size={24} color={WHITE} />
               </TouchableOpacity>
 
               <View style={styles.headerTextContainer}>
                 <Text style={styles.headerTitle}>Game Room</Text>
                 <View style={styles.gameInfoContainer}>
-                  <Ionicons name="game-controller" size={16} color="rgba(212, 175, 55, 0.8)" />
+                  <Ionicons name="game-controller" size={16} color="rgba(255,255,255,0.7)" />
                   <Text style={styles.gameName} numberOfLines={1}>
                     {gameName || "Tambola Game"}
                   </Text>
@@ -2833,65 +3017,72 @@ const UserGameRoom = ({ navigation, route }) => {
           {renderAllCalledNumbersSection()}
 
           {/* Last Called Section */}
-          <View style={styles.card}>
-            {calledNumbers.length > 0 ? (
-              <View style={styles.lastCalledSection}>
-                <View style={styles.lastCalledHeader}>
-                  <Ionicons name="megaphone" size={18} color={ACCENT_COLOR} />
-                  <Text style={styles.sectionTitle}>Last Called Numbers</Text>
+         <View style={styles.card} key={`last-called-${updateTrigger}`}>
+  {calledNumbers.length > 0 ? (
+    <View style={styles.lastCalledSection}>
+      <View style={styles.lastCalledHeader}>
+        <Ionicons name="megaphone" size={18} color={ACCENT_COLOR} />
+        <Text style={styles.sectionTitle}>Last Called Numbers</Text>
+      </View>
+      
+      <View style={styles.circularNumbersGrid}>
+        {calledNumbers.slice(-5).reverse().map((num, index) => {
+          const isLatest = index === 0;
+          return (
+            <TouchableOpacity
+              key={`${num}-${index}-${updateTrigger}`}
+              style={[
+                styles.circularNumberItem,
+                isLatest && styles.latestCircularNumber
+              ]}
+              onPress={() => speakNumber(num)}
+              onLongPress={() => speakNumber(num)}
+            >
+              <Text style={[
+                styles.circularNumberText,
+                isLatest && styles.latestCircularNumberText
+              ]}>
+                {num}
+              </Text>
+              {isLatest && (
+                <View style={styles.latestBadge}>
+                  <Ionicons name="star" size={8} color={WHITE} />
                 </View>
-                
-                <View style={styles.circularNumbersGrid}>
-                  {calledNumbers.slice(-5).reverse().map((num, index) => {
-                    const isLatest = index === 0;
-                    return (
-                      <TouchableOpacity
-                        key={index}
-                        style={[
-                          styles.circularNumberItem,
-                          isLatest && styles.latestCircularNumber
-                        ]}
-                        onPress={() => speakNumber(num)}
-                        onLongPress={() => speakNumber(num)}
-                      >
-                        <Text style={[
-                          styles.circularNumberText,
-                          isLatest && styles.latestCircularNumberText
-                        ]}>
-                          {num}
-                        </Text>
-                        {isLatest && (
-                          <View style={styles.latestBadge}>
-                            <Ionicons name="star" size={8} color={SECONDARY_COLOR} />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-                
-                <TouchableOpacity
-                  style={styles.viewAllButton}
-                  onPress={handleViewAllCalledNumbers}
-                >
-                  <Text style={styles.viewAllButtonText}>View All Called Numbers</Text>
-                  <Ionicons name="chevron-forward" size={14} color={ACCENT_COLOR} />
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <View style={styles.waitingSection}>
-                <Ionicons name="hourglass-outline" size={32} color={WARNING_ORANGE} />
-                <Text style={styles.waitingText}>
-                  Waiting for numbers to be called...
-                </Text>
-              </View>
-            )}
+              )}
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+      
+      <TouchableOpacity
+        style={styles.viewAllButton}
+        onPress={handleViewAllCalledNumbers}
+      >
+        <Text style={styles.viewAllButtonText}>View All Called Numbers</Text>
+        <Ionicons name="chevron-forward" size={14} color={ACCENT_COLOR} />
+      </TouchableOpacity>
+    </View>
+  ) : (
+    <View style={styles.waitingSection}>
+      <Ionicons name="hourglass-outline" size={32} color={WARNING_ORANGE} />
+      <Text style={styles.waitingText}>
+        Waiting for numbers to be called...
+      </Text>
+    </View>
+  )}
+</View>
+
+          {/* Pusher Connection Status */}
+          <View style={styles.pusherStatusCard}>
+            <Text style={styles.pusherStatusText}>
+              Real-time: {pusherRef.current ? 'Connected' : 'Disconnected'}
+            </Text>
           </View>
 
           <View style={styles.ticketsSection}>
             {myTickets.length === 0 ? (
               <View style={styles.emptyTicketsContainer}>
-                <Ionicons name="ticket-outline" size={60} color={ACCENT_COLOR} style={{ opacity: 0.7 }} />
+                <Ionicons name="ticket-outline" size={60} color={PRIMARY_COLOR} style={{ opacity: 0.7 }} />
                 <Text style={styles.emptyTitle}>No Tickets Allocated</Text>
                 <Text style={styles.emptySubtitle}>
                   You haven't been allocated any tickets for this game yet
@@ -2909,7 +3100,7 @@ const UserGameRoom = ({ navigation, route }) => {
                       style={styles.stopBlinkingSmallButton}
                       onPress={stopAllBlinking}
                     >
-                      <Ionicons name="close" size={12} color={ERROR_RED} />
+                      <Ionicons name="close" size={12} color={ERROR_COLOR} />
                     </TouchableOpacity>
                   </View>
                 )}
@@ -2935,7 +3126,7 @@ const UserGameRoom = ({ navigation, route }) => {
         activeOpacity={0.9}
       >
         <View style={styles.chatButtonContent}>
-          <Ionicons name="chatbubble-ellipses" size={20} color={SECONDARY_COLOR} />
+          <Ionicons name="chatbubble-ellipses" size={20} color={WHITE} />
           {participantCount > 0 && (
             <View style={styles.chatBadge}>
               <Text style={styles.chatBadgeText}>
@@ -2952,11 +3143,10 @@ const UserGameRoom = ({ navigation, route }) => {
   );
 };
 
-// Keep all the styles exactly as they were in your original code
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: PRIMARY_COLOR,
+    backgroundColor: BACKGROUND_COLOR,
   },
   container: {
     flex: 1,
@@ -2985,10 +3175,10 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: ACCENT_COLOR,
-    shadowColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
+    shadowColor: PRIMARY_COLOR,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.5,
+    shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 6,
   },
@@ -3002,7 +3192,7 @@ const styles = StyleSheet.create({
     backgroundColor: ACCENT_COLOR,
     shadowColor: ACCENT_COLOR,
     shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.4,
+    shadowOpacity: 0.3,
     shadowRadius: 6,
     elevation: 5,
   },
@@ -3016,7 +3206,7 @@ const styles = StyleSheet.create({
     backgroundColor: ACCENT_COLOR,
     shadowColor: ACCENT_COLOR,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.2,
     shadowRadius: 4,
     elevation: 4,
   },
@@ -3026,16 +3216,21 @@ const styles = StyleSheet.create({
     left: 0,
     width: 100,
     height: '100%',
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     transform: [{ skewX: '-20deg' }],
   },
   header: {
     paddingTop: 15,
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     borderBottomLeftRadius: 25,
     borderBottomRightRadius: 25,
     position: 'relative',
     overflow: 'hidden',
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   headerPattern: {
     position: 'absolute',
@@ -3051,7 +3246,7 @@ const styles = StyleSheet.create({
     left: 0,
     width: 100,
     height: '100%',
-    backgroundColor: 'rgba(212, 175, 55, 0.15)',
+    backgroundColor: 'rgba(255, 255, 255, 0.1)',
     transform: [{ skewX: '-20deg' }],
   },
   headerContent: {
@@ -3067,11 +3262,9 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    backgroundColor: "rgba(255,255,255,0.2)",
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.3)",
   },
   headerTextContainer: {
     flex: 1,
@@ -3080,12 +3273,9 @@ const styles = StyleSheet.create({
   headerTitle: {
     fontSize: 24,
     fontWeight: "800",
-    color: LIGHT_ACCENT,
+    color: WHITE,
     letterSpacing: -0.5,
     marginBottom: 4,
-    textShadowColor: 'rgba(0, 0, 0, 0.3)',
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 2,
   },
   gameInfoContainer: {
     flexDirection: "row",
@@ -3094,7 +3284,7 @@ const styles = StyleSheet.create({
   },
   gameName: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: "rgba(255,255,255,0.7)",
     fontWeight: "500",
   },
   headerActions: {
@@ -3105,34 +3295,32 @@ const styles = StyleSheet.create({
   voiceButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(212, 175, 55, 0.1)",
+    backgroundColor: "rgba(255,255,255,0.2)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.3)",
     gap: 4,
   },
   voiceButtonText: {
     fontSize: 12,
-    color: ACCENT_COLOR,
+    color: WHITE,
     fontWeight: "600",
   },
   card: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 14,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.1)",
-    shadowColor: ACCENT_COLOR,
+    borderColor: BORDER_COLOR,
+    shadowColor: "#000",
     shadowOffset: {
       width: 0,
-      height: 3,
+      height: 1,
     },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 6,
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   lastCalledSection: {
     marginBottom: 0,
@@ -3146,7 +3334,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 15,
     fontWeight: "700",
-    color: ACCENT_COLOR,
+    color: TEXT_DARK,
     flex: 1,
   },
   circularNumbersGrid: {
@@ -3159,11 +3347,11 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: 22,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.3)",
+    borderColor: BORDER_COLOR,
     position: 'relative',
   },
   latestCircularNumber: {
@@ -3174,17 +3362,17 @@ const styles = StyleSheet.create({
   circularNumberText: {
     fontSize: 16,
     fontWeight: "600",
-    color: MUTED_GOLD,
+    color: TEXT_DARK,
   },
   latestCircularNumberText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontWeight: "700",
   },
   latestBadge: {
     position: 'absolute',
     top: -2,
     right: -2,
-    backgroundColor: LIGHT_ACCENT,
+    backgroundColor: WHITE,
     borderRadius: 5,
     padding: 1,
   },
@@ -3192,16 +3380,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: 'center',
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     paddingVertical: 10,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.2)",
+    borderColor: BORDER_COLOR,
     gap: 6,
   },
   viewAllButtonText: {
     fontSize: 13,
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
     fontWeight: "600",
   },
   waitingSection: {
@@ -3216,17 +3404,17 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
   },
   allNumbersCard: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 14,
     padding: 14,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.1)",
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 6,
+    borderColor: BORDER_COLOR,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   allNumbersHeader: {
     flexDirection: 'row',
@@ -3242,10 +3430,10 @@ const styles = StyleSheet.create({
   allNumbersTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: ACCENT_COLOR,
+    color: TEXT_DARK,
   },
   calledCountBadge: {
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10,
@@ -3254,7 +3442,7 @@ const styles = StyleSheet.create({
   calledCountText: {
     fontSize: 11,
     fontWeight: '700',
-    color: SECONDARY_COLOR,
+    color: WHITE,
   },
   viewAllGridButton: {
     flexDirection: 'row',
@@ -3262,14 +3450,14 @@ const styles = StyleSheet.create({
     gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: BORDER_COLOR,
   },
   viewAllGridButtonText: {
     fontSize: 12,
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
     fontWeight: '600',
   },
   numbersGridCompact: {
@@ -3287,38 +3475,38 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
-    backgroundColor: DARK_TEAL,
+    borderColor: BORDER_COLOR,
+    backgroundColor: WHITE,
     marginHorizontal: 2,
     position: 'relative',
   },
   calledNumberItem: {
-    backgroundColor: SUCCESS_GREEN,
-    borderColor: SUCCESS_GREEN,
+    backgroundColor: SUCCESS_COLOR,
+    borderColor: SUCCESS_COLOR,
   },
   latestNumberItem: {
-    backgroundColor: WARNING_ORANGE,
-    borderColor: WARNING_ORANGE,
+    backgroundColor: ACCENT_COLOR,
+    borderColor: ACCENT_COLOR,
     borderWidth: 2,
   },
   numberItemTextCompact: {
     fontSize: 11,
     fontWeight: '600',
-    color: MUTED_GOLD,
+    color: TEXT_DARK,
   },
   calledNumberText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontWeight: '700',
   },
   latestNumberText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontWeight: '900',
   },
   latestIndicatorCompact: {
     position: 'absolute',
     top: -2,
     right: -2,
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 5,
     padding: 1,
   },
@@ -3330,7 +3518,7 @@ const styles = StyleSheet.create({
     gap: 12,
     paddingTop: 10,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(212, 175, 55, 0.2)',
+    borderTopColor: BORDER_COLOR,
   },
   legendItem: {
     flexDirection: 'row',
@@ -3342,20 +3530,20 @@ const styles = StyleSheet.create({
     height: 12,
     borderRadius: 3,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: BORDER_COLOR,
   },
   legendNormal: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: WHITE,
   },
   legendCalled: {
-    backgroundColor: SUCCESS_GREEN,
+    backgroundColor: SUCCESS_COLOR,
   },
   legendLatest: {
-    backgroundColor: WARNING_ORANGE,
+    backgroundColor: ACCENT_COLOR,
   },
   legendText: {
     fontSize: 10,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
   },
   ticketsSection: {
     marginBottom: 12,
@@ -3363,22 +3551,22 @@ const styles = StyleSheet.create({
   activePatternContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+    backgroundColor: "rgba(255, 152, 0, 0.1)",
     padding: 10,
     borderRadius: 10,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: WARNING_ORANGE,
+    borderColor: ACCENT_COLOR,
   },
   activePatternText: {
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: TEXT_DARK,
     marginLeft: 6,
     flex: 1,
   },
   activePatternName: {
     fontWeight: '700',
-    color: WARNING_ORANGE,
+    color: ACCENT_COLOR,
   },
   stopBlinkingSmallButton: {
     padding: 3,
@@ -3418,7 +3606,7 @@ const styles = StyleSheet.create({
   },
   ticketLabel: {
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: TEXT_DARK,
     fontWeight: "600",
   },
   ticketActions: {
@@ -3429,50 +3617,50 @@ const styles = StyleSheet.create({
   viewPatternsButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: ACCENT_COLOR,
+    borderColor: PRIMARY_COLOR,
     gap: 4,
   },
   viewPatternsButtonText: {
     fontSize: 12,
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
     fontWeight: "600",
   },
   claimButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: ACCENT_COLOR,
+    borderColor: PRIMARY_COLOR,
     gap: 4,
   },
   claimButtonText: {
     fontSize: 12,
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontWeight: "600",
   },
   ticketCard: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 12,
     padding: TICKET_PADDING,
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
     overflow: "hidden",
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 6,
-    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   ticket: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     padding: 0,
     borderWidth: 0,
     borderRadius: 0,
@@ -3486,7 +3674,7 @@ const styles = StyleSheet.create({
   },
   cell: {
     borderWidth: 1,
-    borderColor: CELL_BORDER_COLOR,
+    borderColor: PRIMARY_COLOR,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 2,
@@ -3495,11 +3683,11 @@ const styles = StyleSheet.create({
   number: {
     fontSize: 16,
     fontWeight: "bold",
-    color: DARK_TEAL,
+    color: WHITE,
   },
   blinkingCellBorder: {
     borderWidth: 2,
-    borderColor: WARNING_ORANGE,
+    borderColor: ACCENT_COLOR,
   },
   blinkingOverlay: {
     position: 'absolute',
@@ -3511,7 +3699,7 @@ const styles = StyleSheet.create({
   },
   ticketsHint: {
     fontSize: 11,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     textAlign: "center",
     marginTop: 16,
     fontStyle: "italic",
@@ -3520,28 +3708,28 @@ const styles = StyleSheet.create({
   },
   emptyTicketsContainer: {
     alignItems: "center",
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 14,
     padding: 32,
     borderWidth: 1,
-    borderColor: "rgba(212, 175, 55, 0.2)",
+    borderColor: BORDER_COLOR,
     marginTop: 12,
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   emptyTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: ACCENT_COLOR,
+    color: TEXT_DARK,
     marginBottom: 8,
     textAlign: "center",
   },
   emptySubtitle: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     textAlign: "center",
     lineHeight: 20,
     marginBottom: 20,
@@ -3554,7 +3742,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   menuContainer: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 14,
     width: '85%',
     maxHeight: '60%',
@@ -3566,13 +3754,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.2)',
-    backgroundColor: DARK_TEAL,
+    borderBottomColor: BORDER_COLOR,
+    backgroundColor: BACKGROUND_COLOR,
   },
   menuTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
   },
   menuHeaderActions: {
     flexDirection: 'row',
@@ -3588,10 +3776,10 @@ const styles = StyleSheet.create({
   patternMenuItem: {
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.1)',
+    borderBottomColor: BORDER_COLOR,
   },
   disabledPatternItem: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     opacity: 0.7,
   },
   patternMenuItemContent: {
@@ -3605,33 +3793,33 @@ const styles = StyleSheet.create({
   patternMenuItemName: {
     fontSize: 15,
     fontWeight: '600',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
     marginBottom: 3,
   },
   patternMenuItemDesc: {
     fontSize: 12,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
   },
   patternStatusContainer: {
     marginLeft: 6,
   },
   patternLimitText: {
-    color: WARNING_ORANGE,
+    color: ACCENT_COLOR,
     fontWeight: '600',
   },
   limitReachedText: {
-    color: ERROR_RED,
+    color: ERROR_COLOR,
     fontWeight: '700',
   },
   claimedBadge: {
     fontSize: 11,
-    color: SUCCESS_GREEN,
+    color: SUCCESS_COLOR,
     fontWeight: '600',
     marginLeft: 4,
   },
   limitReachedBadge: {
     fontSize: 11,
-    color: ERROR_RED,
+    color: ERROR_COLOR,
     fontWeight: '600',
     marginLeft: 4,
   },
@@ -3641,7 +3829,7 @@ const styles = StyleSheet.create({
   },
   noPatternsText: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     marginTop: 12,
     textAlign: 'center',
     fontWeight: '600',
@@ -3652,23 +3840,23 @@ const styles = StyleSheet.create({
     marginTop: 16,
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: ACCENT_COLOR,
+    borderColor: PRIMARY_COLOR,
     gap: 6,
   },
   retryButtonText: {
     fontSize: 13,
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
     fontWeight: '600',
   },
   disabledPatternName: {
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     textDecorationLine: 'none',
   },
   disabledPatternDesc: {
-    color: '#ADB5BD',
+    color: TEXT_LIGHT,
   },
   patternsModalOverlay: {
     flex: 1,
@@ -3677,7 +3865,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   patternsModalContainer: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 16,
     width: '90%',
     maxHeight: '75%',
@@ -3689,13 +3877,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 16,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.2)',
-    backgroundColor: DARK_TEAL,
+    borderBottomColor: BORDER_COLOR,
+    backgroundColor: BACKGROUND_COLOR,
   },
   patternsModalTitle: {
     fontSize: 20,
     fontWeight: '700',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
   },
   patternsModalHeaderActions: {
     flexDirection: 'row',
@@ -3710,53 +3898,16 @@ const styles = StyleSheet.create({
   },
   patternsModalSubtitle: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     textAlign: 'center',
     paddingHorizontal: 16,
     paddingVertical: 12,
-    backgroundColor: DARK_TEAL,
+    backgroundColor: WHITE,
   },
   currentBlinkingPatternContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(243, 156, 18, 0.1)',
-    padding: 12,
-    marginHorizontal: 16,
-    marginVertical: 8,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: WARNING_ORANGE,
-  },
-  currentBlinkingPatternText: {
-    fontSize: 13,
-    color: MUTED_GOLD,
-    marginLeft: 8,
-    flex: 1,
-  },
-  currentBlinkingPatternName: {
-    fontWeight: '700',
-    color: WARNING_ORANGE,
-  },
-  stopBlinkingButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: SECONDARY_COLOR,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 5,
-    borderWidth: 1,
-    borderColor: ERROR_RED,
-    gap: 4,
-  },
-  stopBlinkingText: {
-    fontSize: 12,
-    color: ERROR_RED,
-    fontWeight: '600',
-  },
-  earlyFiveNoteContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    backgroundColor: "rgba(255, 152, 0, 0.1)",
     padding: 12,
     marginHorizontal: 16,
     marginVertical: 8,
@@ -3764,15 +3915,52 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: ACCENT_COLOR,
   },
+  currentBlinkingPatternText: {
+    fontSize: 13,
+    color: TEXT_DARK,
+    marginLeft: 8,
+    flex: 1,
+  },
+  currentBlinkingPatternName: {
+    fontWeight: '700',
+    color: ACCENT_COLOR,
+  },
+  stopBlinkingButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: BACKGROUND_COLOR,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: ERROR_COLOR,
+    gap: 4,
+  },
+  stopBlinkingText: {
+    fontSize: 12,
+    color: ERROR_COLOR,
+    fontWeight: '600',
+  },
+  earlyFiveNoteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: "rgba(79, 172, 254, 0.1)",
+    padding: 12,
+    marginHorizontal: 16,
+    marginVertical: 8,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: PRIMARY_COLOR,
+  },
   earlyFiveNoteText: {
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     marginLeft: 8,
     flex: 1,
   },
   earlyFiveNoteBold: {
     fontWeight: '700',
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
   },
   patternsLoadingContainer: {
     padding: 32,
@@ -3781,7 +3969,7 @@ const styles = StyleSheet.create({
   patternsLoadingText: {
     marginTop: 12,
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
   },
   patternsList: {
     maxHeight: 350,
@@ -3789,12 +3977,12 @@ const styles = StyleSheet.create({
   patternListItem: {
     padding: 14,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(212, 175, 55, 0.1)',
+    borderBottomColor: BORDER_COLOR,
   },
   selectedPatternListItem: {
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    backgroundColor: "rgba(79, 172, 254, 0.05)",
     borderLeftWidth: 4,
-    borderLeftColor: ACCENT_COLOR,
+    borderLeftColor: PRIMARY_COLOR,
   },
   patternListItemContent: {
     flexDirection: 'row',
@@ -3807,18 +3995,25 @@ const styles = StyleSheet.create({
   patternListItemName: {
     fontSize: 15,
     fontWeight: '600',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
     marginBottom: 3,
   },
   patternListItemDesc: {
     fontSize: 12,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
+  },
+  patternAmountText: {
+    color: SUCCESS_COLOR,
+    fontWeight: '600',
   },
   selectedBadge: {
     fontSize: 12,
-    color: SUCCESS_GREEN,
+    color: SUCCESS_COLOR,
     fontWeight: '600',
     marginLeft: 4,
+  },
+  patternActionContainer: {
+    marginLeft: 8,
   },
   noAvailablePatternsContainer: {
     alignItems: 'center',
@@ -3826,7 +4021,7 @@ const styles = StyleSheet.create({
   },
   noAvailablePatternsText: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     marginTop: 12,
     textAlign: 'center',
     fontWeight: '600',
@@ -3836,33 +4031,33 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 16,
     borderTopWidth: 1,
-    borderTopColor: 'rgba(212, 175, 55, 0.2)',
-    backgroundColor: DARK_TEAL,
+    borderTopColor: BORDER_COLOR,
+    backgroundColor: BACKGROUND_COLOR,
   },
   clearSelectionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: BORDER_COLOR,
     gap: 4,
   },
   clearSelectionButtonText: {
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     fontWeight: '600',
   },
   closePatternsButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     borderRadius: 8,
   },
   closePatternsButtonText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontSize: 13,
     fontWeight: '600',
   },
@@ -3879,19 +4074,19 @@ const styles = StyleSheet.create({
     zIndex: 9999,
   },
   celebrationContent: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 16,
     padding: 16,
     alignItems: 'center',
     width: '80%',
     maxWidth: 300,
-    shadowColor: WARNING_ORANGE,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 12,
-    borderWidth: 3,
-    borderColor: WARNING_ORANGE,
+    shadowColor: ACCENT_COLOR,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 8,
+    borderWidth: 2,
+    borderColor: ACCENT_COLOR,
   },
   celebrationInner: {
     alignItems: 'center',
@@ -3900,91 +4095,89 @@ const styles = StyleSheet.create({
   },
   trophyIcon: {
     marginBottom: 8,
-    shadowColor: WARNING_ORANGE,
+    shadowColor: ACCENT_COLOR,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.6,
+    shadowOpacity: 0.3,
     shadowRadius: 4,
   },
   winningTitle: {
     fontSize: 18,
     fontWeight: '900',
-    color: ERROR_RED,
+    color: ERROR_COLOR,
     textAlign: 'center',
     marginBottom: 10,
   },
   winnerInfo: {
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    backgroundColor: "rgba(79, 172, 254, 0.1)",
     padding: 10,
     borderRadius: 10,
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: ACCENT_COLOR,
+    borderColor: PRIMARY_COLOR,
     width: '100%',
   },
   winnerName: {
     fontSize: 16,
     fontWeight: '800',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
     marginBottom: 4,
     textAlign: 'center',
   },
   winnerPattern: {
     fontSize: 13,
-    color: ERROR_RED,
+    color: ERROR_COLOR,
     fontWeight: '600',
     textAlign: 'center',
   },
   prizeAmountContainer: {
-    backgroundColor: 'rgba(231, 76, 60, 0.1)',
+    backgroundColor: "rgba(231, 76, 60, 0.1)",
     padding: 12,
     borderRadius: 12,
     alignItems: 'center',
     marginBottom: 12,
     borderWidth: 2,
-    borderColor: ERROR_RED,
+    borderColor: ERROR_COLOR,
     width: '100%',
   },
   prizeAmount: {
     fontSize: 28,
     fontWeight: '900',
-    color: ERROR_RED,
+    color: ERROR_COLOR,
     marginBottom: 4,
   },
   prizeLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     letterSpacing: 1,
   },
   celebrationMessage: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(243, 156, 18, 0.1)',
+    backgroundColor: "rgba(255, 152, 0, 0.1)",
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: WARNING_ORANGE,
+    borderColor: ACCENT_COLOR,
   },
   celebrationText: {
     fontSize: 13,
     fontWeight: '800',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
     marginHorizontal: 6,
   },
   closeCelebrationButton: {
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     paddingHorizontal: 20,
     paddingVertical: 8,
     borderRadius: 16,
-    borderWidth: 2,
-    borderColor: SECONDARY_COLOR,
     width: '100%',
     alignItems: 'center',
   },
   closeCelebrationText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontSize: 14,
     fontWeight: 'bold',
   },
@@ -4010,18 +4203,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   gameEndModalContent: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 20,
     padding: 20,
     width: '100%',
     maxWidth: 350,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 8,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: BORDER_COLOR,
   },
   gameEndModalHeader: {
     alignItems: 'center',
@@ -4030,7 +4223,7 @@ const styles = StyleSheet.create({
   gameEndModalTitle: {
     fontSize: 24,
     fontWeight: '900',
-    color: WARNING_ORANGE,
+    color: ACCENT_COLOR,
     textAlign: 'center',
   },
   gameEndModalBody: {
@@ -4039,13 +4232,13 @@ const styles = StyleSheet.create({
   gameEndCongratulations: {
     fontSize: 20,
     fontWeight: '800',
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
     textAlign: 'center',
     marginBottom: 10,
   },
   gameEndMessage: {
     fontSize: 14,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     textAlign: 'center',
     marginBottom: 20,
     lineHeight: 20,
@@ -4053,12 +4246,12 @@ const styles = StyleSheet.create({
   gameEndStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 12,
     padding: 12,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: BORDER_COLOR,
   },
   endStatItem: {
     alignItems: 'center',
@@ -4067,17 +4260,17 @@ const styles = StyleSheet.create({
   endStatValue: {
     fontSize: 20,
     fontWeight: '900',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
     marginBottom: 4,
   },
   endStatLabel: {
     fontSize: 11,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     fontWeight: '600',
   },
   gameEndThanks: {
     fontSize: 13,
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     textAlign: 'center',
     fontStyle: 'italic',
     lineHeight: 18,
@@ -4086,7 +4279,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   viewWinnersButton: {
-    backgroundColor: WARNING_ORANGE,
+    backgroundColor: ACCENT_COLOR,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -4095,20 +4288,20 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   viewWinnersButtonText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontSize: 14,
     fontWeight: '700',
   },
   closeButton: {
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     paddingVertical: 12,
     borderRadius: 10,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: BORDER_COLOR,
   },
   closeButtonText: {
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -4119,7 +4312,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 16,
     padding: 20,
     width: '90%',
@@ -4134,14 +4327,14 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
   },
   modalCloseButton: {
     padding: 4,
   },
   modalSubtitle: {
     fontSize: 13,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     marginBottom: 20,
     lineHeight: 18,
   },
@@ -4151,12 +4344,12 @@ const styles = StyleSheet.create({
     padding: 14,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.2)',
+    borderColor: BORDER_COLOR,
     marginBottom: 10,
   },
   selectedVoiceOption: {
-    borderColor: ACCENT_COLOR,
-    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+    borderColor: PRIMARY_COLOR,
+    backgroundColor: "rgba(79, 172, 254, 0.05)",
   },
   voiceOptionIcon: {
     marginRight: 12,
@@ -4167,25 +4360,25 @@ const styles = StyleSheet.create({
   voiceOptionName: {
     fontSize: 15,
     fontWeight: '600',
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
     marginBottom: 2,
   },
   voiceOptionDesc: {
     fontSize: 12,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
   },
   testVoiceButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     paddingVertical: 12,
     borderRadius: 10,
     marginTop: 12,
     gap: 6,
   },
   testVoiceButtonText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontSize: 14,
     fontWeight: '600',
   },
@@ -4202,9 +4395,9 @@ const styles = StyleSheet.create({
     padding: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 5,
+    elevation: 3,
   },
   snackbarContent: {
     flexDirection: 'row',
@@ -4214,7 +4407,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   snackbarText: {
-    color: '#FFFFFF',
+    color: WHITE,
     fontSize: 14,
     fontWeight: '600',
     flex: 1,
@@ -4223,7 +4416,7 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: PRIMARY_COLOR,
+    backgroundColor: BACKGROUND_COLOR,
   },
   loadingContent: {
     alignItems: 'center',
@@ -4232,19 +4425,19 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    backgroundColor: "rgba(79, 172, 254, 0.1)",
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
     borderWidth: 2,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
+    borderColor: "rgba(79, 172, 254, 0.2)",
   },
   loadingSpinner: {
     marginTop: 10,
   },
   loadingText: {
     fontSize: 16,
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
     fontWeight: "500",
     marginTop: 20,
   },
@@ -4252,20 +4445,20 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 16,
     right: 16,
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     borderRadius: 20,
     paddingVertical: 10,
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 5,
+    shadowRadius: 4,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.2)',
   },
   chatButtonContent: {
     position: 'relative',
@@ -4275,28 +4468,41 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: -4,
     right: -4,
-    backgroundColor: ERROR_RED,
+    backgroundColor: ERROR_COLOR,
     borderRadius: 6,
     minWidth: 14,
     height: 14,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: SECONDARY_COLOR,
+    borderColor: WHITE,
   },
   chatBadgeText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontSize: 8,
     fontWeight: 'bold',
     paddingHorizontal: 2,
   },
   chatButtonText: {
-    color: SECONDARY_COLOR,
+    color: WHITE,
     fontSize: 13,
     fontWeight: 'bold',
   },
   bottomSpace: {
     height: 20,
+  },
+  // Additional Pusher styles
+  pusherStatusCard: {
+    backgroundColor: 'rgba(79, 172, 254, 0.1)',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 12,
+    alignItems: 'center',
+  },
+  pusherStatusText: {
+    fontSize: 12,
+    color: PRIMARY_COLOR,
+    fontWeight: '600',
   },
 });
 

@@ -56,6 +56,45 @@ const HostGamePatterns = () => {
     setRefreshing(false);
   };
 
+  // Sort patterns by specific sequence (same as UserGamePatterns)
+  const sortPatternsBySequence = (patternsData) => {
+    const patternSequence = [
+      { keywords: ['top line', 'top_line', 'topline', 'top-line'] },
+      { keywords: ['middle line', 'middle_line', 'middleline', 'middle-line'] },
+      { keywords: ['bottom line', 'bottom_line', 'bottomline', 'bottom-line'] },
+      { keywords: ['breakfast'] },
+      { keywords: ['lunch'] },
+      { keywords: ['dinner'] },
+      { keywords: ['four corners', 'four_corners', '4 corners', '4_corners', 'fourcorners'] },
+      { keywords: ['bamboo'] },
+      { keywords: ['early five', 'early_five', 'early 5', 'early_5', 'earlyfive'] },
+      { keywords: ['non claimers', 'non_claimers', 'nonclaimers', 'non-claimers'] },
+      { keywords: ['full house', 'full_house', 'fullhouse'] },
+    ];
+
+    const getPatternIndex = (pattern) => {
+      // Normalize: lowercase and replace underscores/hyphens with spaces for matching
+      const rawName = (pattern.display_name || pattern.pattern_name || '').toLowerCase();
+      const normalizedName = rawName.replace(/[-_]/g, ' ');
+
+      for (let i = 0; i < patternSequence.length; i++) {
+        if (patternSequence[i].keywords.some(keyword => {
+          const normalizedKeyword = keyword.replace(/[-_]/g, ' ');
+          return normalizedName.includes(normalizedKeyword);
+        })) {
+          return i;
+        }
+      }
+      return patternSequence.length; // Put unknown patterns at the end
+    };
+
+    return [...patternsData].sort((a, b) => {
+      const aIndex = getPatternIndex(a);
+      const bIndex = getPatternIndex(b);
+      return aIndex - bIndex;
+    });
+  };
+
   const fetchPatterns = async () => {
     try {
       setLoading(true);
@@ -77,7 +116,9 @@ const HostGamePatterns = () => {
 
       if (response.data.status) {
         const patternsData = response.data.data || [];
-        setPatterns(patternsData);
+        // Sort patterns by sequence before setting state
+        const sortedPatterns = sortPatternsBySequence(patternsData);
+        setPatterns(sortedPatterns);
         setError(null);
       } else {
         throw new Error('Failed to fetch patterns');
@@ -268,17 +309,6 @@ const HostGamePatterns = () => {
     });
     
     return patternGrid;
-  };
-
-  // Helper to get actual number positions in a row (which columns have numbers)
-  const getRowNumberPositions = (row) => {
-    const positions = [];
-    for (let col = 0; col < 9; col++) {
-      if (row[col] !== null) {
-        positions.push(col);
-      }
-    }
-    return positions;
   };
 
   const renderPatternCard = (pattern) => {

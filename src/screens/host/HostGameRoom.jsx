@@ -13,9 +13,11 @@ import {
   Animated,
   RefreshControl,
   Modal,
+  Platform,
 } from "react-native";
 import {
   Pusher,
+  PusherMember,
   PusherChannel,
   PusherEvent,
 } from '@pusher/pusher-websocket-react-native';
@@ -26,7 +28,7 @@ import MaterialCommunityIcons from "react-native-vector-icons/MaterialCommunityI
 
 const { width, height } = Dimensions.get("window");
 
-// Custom Snackbar Component (replacing react-native-paper Snackbar)
+// Custom Snackbar Component
 const CustomSnackbar = ({ visible, message, onDismiss, action }) => {
   const [animation] = useState(new Animated.Value(0));
 
@@ -83,8 +85,8 @@ const CustomSnackbar = ({ visible, message, onDismiss, action }) => {
 const CustomSlider = ({ 
   value, 
   onValueChange, 
-  min = 8, 
-  max = 15, 
+  min = 5, 
+  max = 30, 
   step = 1,
   disabled = false 
 }) => {
@@ -98,16 +100,12 @@ const CustomSlider = ({
   const calculateValue = (x) => {
     if (sliderWidth === 0 || disabled) return value;
     
-    // Calculate percentage
     let percentage = (x / sliderWidth) * 100;
     percentage = Math.max(0, Math.min(100, percentage));
     
-    // Calculate value based on percentage
     const range = max - min;
-    const stepSize = range / ((range) / step);
     const rawValue = min + (percentage / 100) * range;
     
-    // Round to nearest step
     let newValue = Math.round(rawValue / step) * step;
     newValue = Math.max(min, Math.min(max, newValue));
     
@@ -154,7 +152,6 @@ const CustomSlider = ({
           />
         </View>
         
-        {/* Touchable area */}
         <View
           style={styles.sliderTouchArea}
           onStartShouldSetResponder={() => !disabled}
@@ -165,7 +162,6 @@ const CustomSlider = ({
           onResponderTerminate={handleTouchEnd}
         />
         
-        {/* Thumb */}
         <View 
           style={[
             styles.sliderThumb,
@@ -176,28 +172,10 @@ const CustomSlider = ({
         />
       </View>
       
-      {/* Labels */}
       <View style={styles.sliderLabels}>
         <Text style={styles.sliderLabel}>{min}s</Text>
         <Text style={styles.sliderValueLabel}>{value}s</Text>
         <Text style={styles.sliderLabel}>{max}s</Text>
-      </View>
-      
-      {/* Interval marks */}
-      <View style={styles.sliderMarks}>
-        {Array.from({ length: (max - min) / step + 1 }, (_, i) => {
-          const markValue = min + (i * step);
-          const markPercentage = ((markValue - min) / (max - min)) * 100;
-          return (
-            <View 
-              key={markValue}
-              style={[
-                styles.sliderMark,
-                { left: `${markPercentage}%`, marginLeft: -1 }
-              ]}
-            />
-          );
-        })}
       </View>
     </View>
   );
@@ -209,6 +187,7 @@ const HostGameRoom = ({ navigation, route }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [gameStatus, setGameStatus] = useState(null);
   const [calledNumbers, setCalledNumbers] = useState([]);
+  const [sortedNumbers, setSortedNumbers] = useState([]);
   const [numberCallingStatus, setNumberCallingStatus] = useState(null);
   const [initializing, setInitializing] = useState(false);
   const [startingAutoMode, setStartingAutoMode] = useState(false);
@@ -223,7 +202,7 @@ const HostGameRoom = ({ navigation, route }) => {
   const [participantCount, setParticipantCount] = useState(0);
   const [isChatJoined, setIsChatJoined] = useState(false);
   
-  // Pending Claims State
+  // Pending Claims States
   const [pendingClaimsCount, setPendingClaimsCount] = useState(0);
   const [claims, setClaims] = useState([]);
   
@@ -231,17 +210,55 @@ const HostGameRoom = ({ navigation, route }) => {
   const [snackbarVisible, setSnackbarVisible] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   
-  // Pusher Refs
+  // Pusher Refs - Make them specific to this component instance
   const pusherRef = useRef(null);
-  const gameStatusChannelRef = useRef(null);
-  const numberCallingChannelRef = useRef(null);
-  const claimsChannelRef = useRef(null);
+  const gameChannelRef = useRef(null);
+  const adminChannelRef = useRef(null);
+  const isMountedRef = useRef(true);
+  
+  // Reconnection Refs
+  const reconnectAttemptsRef = useRef(0);
+  const reconnectTimeoutRef = useRef(null);
+  const maxReconnectAttempts = 5; // Reduced from 10 to prevent infinite loops
+
+  // Refs for latest values to avoid stale closures
+  const calledNumbersRef = useRef([]);
+  const numberCallingStatusRef = useRef(null);
+  const fetchGameStatusTimeoutRef = useRef(null);
 
   const pulseAnim = useRef(new Animated.Value(1)).current;
   const manualButtonAnim = useRef(new Animated.Value(1)).current;
-  const claimsRef = useRef([]);
-  const previousPendingCountRef = useRef(0);
   const autoModeWasRunningRef = useRef(false);
+
+  // Update refs when state changes
+  useEffect(() => {
+    calledNumbersRef.current = calledNumbers;
+  }, [calledNumbers]);
+
+  useEffect(() => {
+    numberCallingStatusRef.current = numberCallingStatus;
+  }, [numberCallingStatus]);
+
+  // Debug logging for numberCallingStatus changes
+  useEffect(() => {
+    if (isMountedRef.current) {
+      console.log(`🔄 [Game ${gameId}] numberCallingStatus updated:`, {
+        auto_mode: numberCallingStatus?.auto_mode,
+        is_running: numberCallingStatus?.is_running,
+        is_paused: numberCallingStatus?.is_paused,
+        interval_seconds: numberCallingStatus?.interval_seconds,
+      });
+    }
+  }, [numberCallingStatus, gameId]);
+
+  // Set mounted ref
+  useEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => { 
     const initializeApp = async () => {
@@ -249,209 +266,360 @@ const HostGameRoom = ({ navigation, route }) => {
         await initializePusher();
         await fetchInitialData();
         startPulseAnimation();
-        setLoading(false);
+        if (isMountedRef.current) {
+          setLoading(false);
+        }
       } catch (error) {
-        console.log("Error initializing app:", error);
-        showSnackbar("Failed to initialize Pusher. Please check your connection.", 'warning');
-        setLoading(false);
+        console.log(`[Game ${gameId}] Error initializing app:`, error);
+        if (isMountedRef.current) {
+          showSnackbar("Failed to initialize. Please check your connection.");
+          setLoading(false);
+        }
       }
     };
     
     initializeApp();
     
     return () => {
+      console.log(`[Game ${gameId}] Cleaning up...`);
       cleanupPusher();
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current);
+      }
+      if (fetchGameStatusTimeoutRef.current) {
+        clearTimeout(fetchGameStatusTimeoutRef.current);
+      }
     };
-  }, []);
+  }, [gameId]);
 
-  // Initialize Pusher
+  // Initialize Pusher with correct channels and auto-reconnection
   const initializePusher = async () => {
     try {
+      console.log(`[Game ${gameId}] Initializing Pusher...`);
+      
+      // Create a new Pusher instance for this game
       const pusher = Pusher.getInstance();
       
       await pusher.init({
-        apiKey: "9c1d16690beded57332a",
-        cluster: "ap2",
+        apiKey: '9c1d16690beded57332a',
+        cluster: 'ap2',
+        forceTLS: true,
+        activityTimeout: 30000,
+        pongTimeout: 30000,
+        onConnectionStateChange: (currentState, previousState) => {
+          console.log(`[Game ${gameId}] Connection state changed from ${previousState} to ${currentState}`);
+          
+          if (currentState === 'CONNECTED') {
+            console.log(`[Game ${gameId}] Connected successfully`);
+            reconnectAttemptsRef.current = 0;
+            if (reconnectTimeoutRef.current) {
+              clearTimeout(reconnectTimeoutRef.current);
+              reconnectTimeoutRef.current = null;
+            }
+          }
+          
+          if (currentState === 'DISCONNECTED' && isMountedRef.current) {
+            console.log(`[Game ${gameId}] Disconnected, will attempt to reconnect...`);
+            scheduleReconnection();
+          }
+        },
+        onError: (message, code, error) => {
+          console.log(`[Game ${gameId}] Pusher error: ${message}`, error);
+          if (isMountedRef.current) {
+            scheduleReconnection();
+          }
+        }
       });
       
       await pusher.connect();
+      console.log(`[Game ${gameId}] Pusher connected successfully`);
       
-      // Subscribe to game status channel
-      const gameStatusChannel = await pusher.subscribe({
-        channelName: `game-status-${gameId}`,
+      // Subscribe to game channel with game-specific event handler
+      const gameChannel = await pusher.subscribe({
+        channelName: `game.${gameId}`,
         onEvent: (event) => {
-          console.log("Game status event received:", event);
-          handleGameStatusEvent(event);
+          // Only process events for this game
+          if (isMountedRef.current) {
+            handleGameEvent(event);
+          }
         }
       });
-      gameStatusChannelRef.current = gameStatusChannel;
+      gameChannelRef.current = gameChannel;
       
-      // Subscribe to number calling channel
-      const numberCallingChannel = await pusher.subscribe({
-        channelName: `number-calling-${gameId}`,
+      // Subscribe to admin channel with game-specific event handler
+      const adminChannel = await pusher.subscribe({
+        channelName: `admin.game.${gameId}`,
         onEvent: (event) => {
-          console.log("Number calling event received:", event);
-          handleNumberCallingEvent(event);
+          // Only process events for this game
+          if (isMountedRef.current) {
+            handleAdminEvent(event);
+          }
         }
       });
-      numberCallingChannelRef.current = numberCallingChannel;
-      
-      // Subscribe to claims channel
-      const claimsChannel = await pusher.subscribe({
-        channelName: `game-claims-${gameId}`,
-        onEvent: (event) => {
-          console.log("Claims event received:", event);
-          handleClaimsEvent(event);
-        }
-      });
-      claimsChannelRef.current = claimsChannel;
+      adminChannelRef.current = adminChannel;
       
       pusherRef.current = pusher;
       
-      console.log("Pusher initialized successfully for host");
+      console.log(`[Game ${gameId}] Pusher initialized successfully with all subscriptions`);
+      
     } catch (error) {
-      console.log("Error initializing Pusher:", error);
+      console.log(`[Game ${gameId}] ❌ Error initializing Pusher:`, error);
+      if (isMountedRef.current) {
+        scheduleReconnection();
+      }
       throw error;
     }
   };
 
-  // Handle game status events from Pusher
-  const handleGameStatusEvent = (event) => {
-    if (event.eventName === 'game-updated') {
-      try {
-        const data = JSON.parse(event.data);
-        setGameStatus(data.game);
-      } catch (error) {
-        console.log("Error parsing game status event:", error);
+  // Handle game channel events
+  const handleGameEvent = (event) => {
+    console.log(`[Game ${gameId}] Game channel event: ${event.eventName}`);
+    
+    try {
+      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+      
+      // Verify this event is for our game
+      if (data.game_id && data.game_id !== parseInt(gameId)) {
+        console.log(`[Game ${gameId}] Ignoring event for game ${data.game_id}`);
+        return;
+      }
+      
+      switch (event.eventName) {
+        case 'number.called':
+          handleNumberCalled(data);
+          break;
+        case 'calling.status.updated':
+          handleStatusUpdated(data);
+          break;
+        case 'game.completed':
+          handleGameCompleted(data);
+          break;
+        default:
+          console.log(`[Game ${gameId}] Unhandled game event: ${event.eventName}`);
+      }
+    } catch (error) {
+      console.log(`[Game ${gameId}] Error handling game event:`, error);
+    }
+  };
+
+  // Handle admin channel events
+  const handleAdminEvent = (event) => {
+    console.log(`[Game ${gameId}] Admin channel event: ${event.eventName}`);
+    
+    try {
+      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+      
+      // Verify this event is for our game
+      if (data.game_id && data.game_id !== parseInt(gameId)) {
+        console.log(`[Game ${gameId}] Ignoring admin event for game ${data.game_id}`);
+        return;
+      }
+      
+      switch (event.eventName) {
+        case 'number.called':
+          handleNumberCalled(data);
+          break;
+        case 'calling.status.updated':
+          handleStatusUpdated(data);
+          break;
+        case 'game.completed':
+          handleGameCompleted(data);
+          break;
+        default:
+          console.log(`[Game ${gameId}] Unhandled admin event: ${event.eventName}`);
+      }
+    } catch (error) {
+      console.log(`[Game ${gameId}] Error handling admin event:`, error);
+    }
+  };
+
+  // Schedule reconnection with exponential backoff
+  const scheduleReconnection = () => {
+    if (!isMountedRef.current) return;
+    
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+    }
+    
+    if (reconnectAttemptsRef.current >= maxReconnectAttempts) {
+      console.log(`[Game ${gameId}] Max reconnection attempts reached`);
+      showSnackbar('Unable to maintain real-time connection. Please refresh the page.');
+      return;
+    }
+    
+    const delay = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+    
+    console.log(`[Game ${gameId}] Scheduling reconnection attempt ${reconnectAttemptsRef.current + 1} in ${delay}ms`);
+    
+    reconnectTimeoutRef.current = setTimeout(() => {
+      if (isMountedRef.current) {
+        reconnectPusher();
+      }
+    }, delay);
+  };
+
+  // Reconnect function
+  const reconnectPusher = async () => {
+    try {
+      console.log(`[Game ${gameId}] Attempting to reconnect Pusher...`);
+      
+      reconnectAttemptsRef.current += 1;
+      
+      await cleanupPusher();
+      
+      if (isMountedRef.current) {
+        await initializePusher();
+        reconnectAttemptsRef.current = 0;
+        showSnackbar('Reconnected successfully');
+      }
+      
+    } catch (error) {
+      console.log(`[Game ${gameId}] Reconnection failed:`, error);
+      if (isMountedRef.current) {
+        scheduleReconnection();
       }
     }
   };
 
-  // Handle number calling events from Pusher
-  const handleNumberCallingEvent = (event) => {
-    if (event.eventName === 'number-called') {
-      try {
-        const data = JSON.parse(event.data);
-        const newNumber = data.number;
-        
-        if (newNumber && !calledNumbers.includes(newNumber)) {
-          const updatedNumbers = [...calledNumbers, newNumber];
-          setCalledNumbers(updatedNumbers);
-          
-          // Refresh game status to get updated calling status
+  // Handle number called event
+  const handleNumberCalled = (data) => {
+    if (!isMountedRef.current) return;
+    
+    console.log(`[Game ${gameId}] Processing number called event:`, data);
+    
+    try {
+      const number = data.number;
+      const totalCalled = data.total_called;
+      const sorted = data.sorted_numbers || [];
+      
+      console.log(`[Game ${gameId}] 📞 New number: ${number}, Total called: ${totalCalled}`);
+      
+      setCalledNumbers(prev => {
+        if (!prev.includes(number)) {
+          const updated = [...prev, number];
+          console.log(`[Game ${gameId}] Updated called numbers: ${prev.length} → ${updated.length}`);
+          return updated;
+        }
+        return prev;
+      });
+      
+      setSortedNumbers(sorted);
+      
+      showSnackbar(`🔔 Number ${number} called!`);
+      
+      // Debounce fetchGameStatus to avoid too many calls
+      if (fetchGameStatusTimeoutRef.current) {
+        clearTimeout(fetchGameStatusTimeoutRef.current);
+      }
+      
+      fetchGameStatusTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
           fetchGameStatus();
         }
-      } catch (error) {
-        console.log("Error parsing number calling event:", error);
-      }
-    } else if (event.eventName === 'calling-started') {
-      try {
-        const data = JSON.parse(event.data);
-        setNumberCallingStatus(data.calling);
-        showSnackbar("Auto number calling started");
-      } catch (error) {
-        console.log("Error parsing calling started event:", error);
-      }
-    } else if (event.eventName === 'calling-paused') {
-      try {
-        const data = JSON.parse(event.data);
-        setNumberCallingStatus(data.calling);
-        showSnackbar("Number calling paused");
-      } catch (error) {
-        console.log("Error parsing calling paused event:", error);
-      }
-    } else if (event.eventName === 'calling-resumed') {
-      try {
-        const data = JSON.parse(event.data);
-        setNumberCallingStatus(data.calling);
-        showSnackbar("Number calling resumed");
-      } catch (error) {
-        console.log("Error parsing calling resumed event:", error);
-      }
+      }, 500);
+      
+    } catch (error) {
+      console.log(`[Game ${gameId}] Error handling number called event:`, error);
     }
   };
 
-  // Handle claims events from Pusher
-  const handleClaimsEvent = (event) => {
-    if (event.eventName === 'claim-submitted') {
-      try {
-        const data = JSON.parse(event.data);
-        const claim = data.claim;
-        
-        // Update claims count
-        setPendingClaimsCount(prev => prev + 1);
-        setClaims(prev => [claim, ...prev]);
-        
-        // Show notification
-        const message = `📝 New claim submitted by ${claim.user_name} for ${claim.reward_name || claim.pattern_name}!`;
-        setSnackbarMessage(message);
-        setSnackbarVisible(true);
-        
-        // Automatically pause number calling if it's running
-        if (numberCallingStatus?.is_running && !numberCallingStatus?.is_paused) {
-          autoModeWasRunningRef.current = true;
-          pauseNumberCallingAutomatically();
-        }
-      } catch (error) {
-        console.log("Error parsing claim submitted event:", error);
+  // Handle status updated event
+  const handleStatusUpdated = (data) => {
+    if (!isMountedRef.current) return;
+    
+    console.log(`[Game ${gameId}] Processing status updated event:`, data);
+    
+    try {
+      setNumberCallingStatus({
+        auto_mode: data.auto_mode || false,
+        is_running: data.is_running || false,
+        is_paused: data.is_paused || false,
+        interval_seconds: data.interval_seconds || data.interval || 10,
+        total_calls: data.total_calls || 0,
+        next_call_in: data.next_call_in,
+        next_call_at: data.next_call_at,
+        status: data.status,
+        started_at: data.started_at,
+        paused_at: data.paused_at,
+        resumed_at: data.resumed_at,
+        stopped_at: data.stopped_at,
+      });
+      
+      if (data.message) {
+        showSnackbar(data.message);
       }
-    } else if (event.eventName === 'claim-approved' || event.eventName === 'claim-rejected') {
-      try {
-        const data = JSON.parse(event.data);
-        const claim = data.claim;
-        
-        // Update claims list
-        setClaims(prev => prev.filter(c => c.id !== claim.id));
-        
-        // Update count if claim was pending
-        if (claim.claim_status === 'pending') {
-          setPendingClaimsCount(prev => Math.max(0, prev - 1));
-        }
-        
-        // Show notification
-        const action = event.eventName === 'claim-approved' ? 'approved' : 'rejected';
-        const message = `📋 ${claim.user_name}'s ${claim.reward_name || claim.pattern_name} claim has been ${action}!`;
-        setSnackbarMessage(message);
-        setSnackbarVisible(true);
-      } catch (error) {
-        console.log("Error parsing claim event:", error);
+      
+      // Debounce fetchGameStatus
+      if (fetchGameStatusTimeoutRef.current) {
+        clearTimeout(fetchGameStatusTimeoutRef.current);
       }
+      
+      fetchGameStatusTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current) {
+          fetchGameStatus();
+        }
+      }, 500);
+      
+    } catch (error) {
+      console.log(`[Game ${gameId}] Error handling status updated event:`, error);
     }
+  };
+
+  // Handle game completed event
+  const handleGameCompleted = (data) => {
+    if (!isMountedRef.current) return;
+    
+    console.log(`[Game ${gameId}] Processing game completed event:`, data);
+    
+    Alert.alert(
+      "🎉 Game Completed",
+      `${data.game_name} has been completed!\nTotal Numbers: ${data.total_numbers}`,
+      [
+        {
+          text: "OK",
+          onPress: () => {
+            navigation.goBack();
+          }
+        }
+      ]
+    );
   };
 
   // Cleanup Pusher connections
-  const cleanupPusher = () => {
-    if (pusherRef.current) {
-      try {
-        if (gameStatusChannelRef.current) {
-          pusherRef.current.unsubscribe({
-            channelName: `game-status-${gameId}`
-          });
-        }
-        if (numberCallingChannelRef.current) {
-          pusherRef.current.unsubscribe({
-            channelName: `number-calling-${gameId}`
-          });
-        }
-        if (claimsChannelRef.current) {
-          pusherRef.current.unsubscribe({
-            channelName: `game-claims-${gameId}`
-          });
-        }
-        pusherRef.current.disconnect();
-      } catch (error) {
-        console.log("Error cleaning up Pusher:", error);
+  const cleanupPusher = async () => {
+    console.log(`[Game ${gameId}] Cleaning up Pusher...`);
+    
+    try {
+      const pusher = Pusher.getInstance();
+      
+      if (gameChannelRef.current) {
+        await pusher.unsubscribe({ channelName: `game.${gameId}` });
+        gameChannelRef.current = null;
       }
+      if (adminChannelRef.current) {
+        await pusher.unsubscribe({ channelName: `admin.game.${gameId}` });
+        adminChannelRef.current = null;
+      }
+      
+      // Only disconnect if this is the last instance using Pusher
+      // Since Pusher is shared, we shouldn't disconnect here
+      console.log(`[Game ${gameId}] Pusher cleaned up`);
+    } catch (error) {
+      console.log(`[Game ${gameId}] Error cleaning up Pusher:`, error);
     }
   };
 
   // Custom Snackbar functions
   const showSnackbar = (message) => {
+    if (!isMountedRef.current) return;
+    
     setSnackbarMessage(message);
     setSnackbarVisible(true);
     
     setTimeout(() => {
-      setSnackbarVisible(false);
+      if (isMountedRef.current) {
+        setSnackbarVisible(false);
+      }
     }, 3000);
   };
 
@@ -478,13 +646,12 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success && isMountedRef.current) {
         fetchGameStatus();
-        setSnackbarMessage("⏸️ Auto calling paused automatically due to new claims");
-        setSnackbarVisible(true);
+        showSnackbar("⏸️ Auto calling paused automatically due to new claims");
       }
     } catch (error) {
-      console.log("Error automatically pausing number calling:", error);
+      console.log(`[Game ${gameId}] Error automatically pausing number calling:`, error);
     }
   };
 
@@ -501,17 +668,18 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success && isMountedRef.current) {
         setParticipantCount(response.data.total_participants || 0);
         const tokenData = await AsyncStorage.getItem("host");
         if (tokenData) {
           const host = JSON.parse(tokenData);
-          const isParticipant = response.data.data.some(p => p.id === host.id);
+          const participants = response.data.data || [];
+          const isParticipant = Array.isArray(participants) ? participants.some(p => p.id === host.id) : false;
           setIsChatJoined(isParticipant);
         }
       }
     } catch (error) {
-      console.log("Error checking chat status:", error);
+      console.log(`[Game ${gameId}] Error checking chat status:`, error);
     }
   };
 
@@ -529,29 +697,29 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success && isMountedRef.current) {
         const previousCount = pendingClaimsCount;
-        const newCount = response.data.data.summary.total_pending || 0;
+        const newCount = response.data.data?.summary?.total_pending || 0;
         
         setPendingClaimsCount(newCount);
-        setClaims(response.data.data.claims || []);
+        setClaims(response.data.data?.claims || []);
         
         if (newCount > previousCount) {
           const message = `📝 ${newCount - previousCount} new claim${newCount - previousCount > 1 ? 's' : ''} submitted!`;
-          setSnackbarMessage(message);
-          setSnackbarVisible(true);
+          showSnackbar(message);
           
-          // Automatically pause number calling if it's running
-          if (numberCallingStatus?.is_running && !numberCallingStatus?.is_paused) {
+          if (numberCallingStatusRef.current?.is_running && !numberCallingStatusRef.current?.is_paused) {
             autoModeWasRunningRef.current = true;
             pauseNumberCallingAutomatically();
           }
         }
       }
     } catch (error) {
-      console.log("Error fetching pending claims count:", error);
-      setPendingClaimsCount(0);
-      setClaims([]);
+      console.log(`[Game ${gameId}] Error fetching pending claims count:`, error);
+      if (isMountedRef.current) {
+        setPendingClaimsCount(0);
+        setClaims([]);
+      }
     }
   };
 
@@ -580,7 +748,7 @@ const HostGameRoom = ({ navigation, route }) => {
                 }
               );
 
-              if (response.data.success) {
+              if (response.data.success && isMountedRef.current) {
                 Alert.alert(
                   "Success",
                   "Game ended successfully!",
@@ -600,13 +768,17 @@ const HostGameRoom = ({ navigation, route }) => {
                 throw new Error(response.data.message || "Failed to end game");
               }
             } catch (error) {
-              console.log("Error ending game:", error);
-              Alert.alert(
-                "Error",
-                error.response?.data?.message || error.message || "Failed to end game"
-              );
+              console.log(`[Game ${gameId}] Error ending game:`, error);
+              if (isMountedRef.current) {
+                Alert.alert(
+                  "Error",
+                  error.response?.data?.message || error.message || "Failed to end game"
+                );
+              }
             } finally {
-              setEndingGame(false);
+              if (isMountedRef.current) {
+                setEndingGame(false);
+              }
             }
           },
         },
@@ -628,7 +800,7 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success && isMountedRef.current) {
         setIsChatJoined(true);
         setParticipantCount(response.data.participant_count || 1);
         navigation.navigate('HostLiveChat', {
@@ -638,7 +810,7 @@ const HostGameRoom = ({ navigation, route }) => {
         });
       }
     } catch (error) {
-      console.log("Error joining chat:", error);
+      console.log(`[Game ${gameId}] Error joining chat:`, error);
     }
   };
 
@@ -647,7 +819,9 @@ const HostGameRoom = ({ navigation, route }) => {
     await fetchGameStatus();
     await checkChatStatus();
     await fetchPendingClaimsCount();
-    setRefreshing(false);
+    if (isMountedRef.current) {
+      setRefreshing(false);
+    }
   };
 
   const startPulseAnimation = () => {
@@ -689,8 +863,12 @@ const HostGameRoom = ({ navigation, route }) => {
   };
 
   const fetchGameStatus = async () => {
+    if (!isMountedRef.current) return;
+    
     try {
       const token = await AsyncStorage.getItem("hostToken");
+      
+      console.log(`[Game ${gameId}] 🔍 Fetching game status...`);
       
       const response = await axios.get(
         `https://tambolatime.co.in/public/api/host/games/${gameId}/number-calling/status`,
@@ -702,19 +880,42 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success && isMountedRef.current) {
         const data = response.data.data;
+        
         setGameStatus(data.game);
-        setNumberCallingStatus(data.calling);
-        setCalledNumbers(data.numbers.called_numbers || []);
+        
+        const callingStatus = {
+          auto_mode: data.calling?.auto_mode || false,
+          is_running: data.calling?.is_running || false,
+          is_paused: data.calling?.is_paused || false,
+          interval_seconds: data.calling?.interval_seconds || 10,
+          total_calls: data.calling?.total_calls || 0,
+          next_call_in: data.calling?.next_call_in_seconds || data.calling?.next_call_in,
+          next_call_at: data.calling?.next_call_at,
+          status: data.calling?.status,
+          started_at: data.calling?.started_at,
+          paused_at: data.calling?.paused_at,
+          resumed_at: data.calling?.resumed_at,
+          stopped_at: data.calling?.stopped_at,
+        };
+        
+        setNumberCallingStatus(callingStatus);
+        
+        // Only update called numbers if they're different to avoid unnecessary re-renders
+        const newCalledNumbers = data.numbers?.called_numbers || [];
+        if (JSON.stringify(calledNumbersRef.current) !== JSON.stringify(newCalledNumbers)) {
+          setCalledNumbers(newCalledNumbers);
+        }
+        
+        setSortedNumbers(data.numbers?.sorted_numbers || []);
+        
         if (data.calling?.interval_seconds) {
           setIntervalSeconds(data.calling.interval_seconds);
         }
-        setLoading(false);
       }
     } catch (error) {
-      console.log("Error fetching game status:", error);
-      setLoading(false);
+      console.log(`[Game ${gameId}] ❌ Error fetching game status:`, error);
     }
   };
 
@@ -736,32 +937,38 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success && isMountedRef.current) {
         const calledNumber = response.data.data.number;
-        // Pusher will handle the update via handleNumberCallingEvent
         showSnackbar(`Called number: ${calledNumber}`);
+        await fetchGameStatus();
       } else {
         throw new Error("Failed to call next number");
       }
     } catch (error) {
-      console.log("Error calling next number:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || error.message || "Failed to call next number"
-      );
+      console.log(`[Game ${gameId}] Error calling next number:`, error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.message || error.message || "Failed to call next number"
+        );
+      }
     } finally {
-      setCallingManual(false);
+      if (isMountedRef.current) {
+        setCallingManual(false);
+      }
     }
   };
 
   const initializeNumberCalling = async () => {
     try {
       setInitializing(true);
+      console.log(`[Game ${gameId}] 🚀 Initializing number calling...`);
+      
       const token = await AsyncStorage.getItem("hostToken");
       
       const response = await axios.post(
         `https://tambolatime.co.in/public/api/host/games/${gameId}/number-calling/initialize`,
-        { interval_seconds: 60 },
+        { interval_seconds: 10 },
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -770,21 +977,35 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
-        setIntervalSeconds(60);
-        fetchGameStatus();
-        showSnackbar("Number calling system initialized");
+      if (response.data.success && isMountedRef.current) {
+        setIntervalSeconds(10);
+        
+        setNumberCallingStatus(prev => ({
+          ...prev,
+          auto_mode: true,
+          interval_seconds: 10
+        }));
+        
+        await fetchGameStatus();
+        
+        showSnackbar("✅ Number calling system initialized");
+        
+        console.log(`[Game ${gameId}] ✅ Number calling initialized successfully`);
       } else {
         throw new Error("Failed to initialize number calling");
       }
     } catch (error) {
-      console.log("Error initializing number calling:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || error.message || "Failed to initialize number calling"
-      );
+      console.log(`[Game ${gameId}] ❌ Error initializing number calling:`, error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.message || error.message || "Failed to initialize number calling"
+        );
+      }
     } finally {
-      setInitializing(false);
+      if (isMountedRef.current) {
+        setInitializing(false);
+      }
     }
   };
 
@@ -804,19 +1025,24 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success && isMountedRef.current) {
         showSnackbar(`Interval updated to ${intervalSeconds} seconds`);
+        await fetchGameStatus();
       } else {
         throw new Error("Failed to update interval");
       }
     } catch (error) {
-      console.log("Error updating interval:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || error.message || "Failed to update interval"
-      );
+      console.log(`[Game ${gameId}] Error updating interval:`, error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.message || error.message || "Failed to update interval"
+        );
+      }
     } finally {
-      setUpdatingInterval(false);
+      if (isMountedRef.current) {
+        setUpdatingInterval(false);
+      }
     }
   };
 
@@ -836,20 +1062,24 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
-        fetchGameStatus();
+      if (response.data.success && isMountedRef.current) {
+        await fetchGameStatus();
         showSnackbar("Auto number calling started");
       } else {
         throw new Error("Failed to start auto number calling");
       }
     } catch (error) {
-      console.log("Error starting auto number calling:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || error.message || "Failed to start auto number calling"
-      );
+      console.log(`[Game ${gameId}] Error starting auto number calling:`, error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.message || error.message || "Failed to start auto number calling"
+        );
+      }
     } finally {
-      setStartingAutoMode(false);
+      if (isMountedRef.current) {
+        setStartingAutoMode(false);
+      }
     }
   };
 
@@ -869,20 +1099,24 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
-        fetchGameStatus();
+      if (response.data.success && isMountedRef.current) {
+        await fetchGameStatus();
         showSnackbar("Number calling paused");
       } else {
         throw new Error("Failed to pause number calling");
       }
     } catch (error) {
-      console.log("Error pausing number calling:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || error.message || "Failed to pause number calling"
-      );
+      console.log(`[Game ${gameId}] Error pausing number calling:`, error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.message || error.message || "Failed to pause number calling"
+        );
+      }
     } finally {
-      setPausing(false);
+      if (isMountedRef.current) {
+        setPausing(false);
+      }
     }
   };
 
@@ -902,20 +1136,24 @@ const HostGameRoom = ({ navigation, route }) => {
         }
       );
 
-      if (response.data.success) {
-        fetchGameStatus();
+      if (response.data.success && isMountedRef.current) {
+        await fetchGameStatus();
         showSnackbar("Number calling resumed");
       } else {
         throw new Error("Failed to resume number calling");
       }
     } catch (error) {
-      console.log("Error resuming number calling:", error);
-      Alert.alert(
-        "Error",
-        error.response?.data?.message || error.message || "Failed to resume number calling"
-      );
+      console.log(`[Game ${gameId}] Error resuming number calling:`, error);
+      if (isMountedRef.current) {
+        Alert.alert(
+          "Error",
+          error.response?.data?.message || error.message || "Failed to resume number calling"
+        );
+      }
     } finally {
-      setResuming(false);
+      if (isMountedRef.current) {
+        setResuming(false);
+      }
     }
   };
 
@@ -924,6 +1162,7 @@ const HostGameRoom = ({ navigation, route }) => {
       gameId: gameId,
       gameName: gameName,
       calledNumbers: calledNumbers,
+      sortedNumbers: sortedNumbers,
     });
   };
 
@@ -966,6 +1205,49 @@ const HostGameRoom = ({ navigation, route }) => {
     );
   };
 
+  const renderLastCalledSection = () => {
+    if (calledNumbers.length === 0) return null;
+    
+    const lastFive = [...calledNumbers].slice(-5).reverse();
+    
+    return (
+      <View style={styles.lastCalledCard}>
+        <View style={styles.lastCalledHeader}>
+          <Ionicons name="megaphone-outline" size={24} color="#9C27B0" />
+          <Text style={styles.lastCalledTitle}>Last Called Number</Text>
+        </View>
+        
+        <View style={styles.lastNumberContainer}>
+          <Text style={styles.lastNumber}>
+            {calledNumbers[calledNumbers.length - 1]}
+          </Text>
+        </View>
+        
+        <View style={styles.calledSequence}>
+          <Text style={styles.calledSequenceTitle}>Recently Called:</Text>
+          <View style={styles.calledSequenceNumbers}>
+            {lastFive.map((num, index) => (
+              <View
+                key={`${num}-${index}`}
+                style={styles.sequenceNumber}
+              >
+                <Text style={styles.sequenceNumberText}>{num}</Text>
+              </View>
+            ))}
+          </View>
+          
+          <TouchableOpacity
+            style={styles.loadMoreButton}
+            onPress={navigateToCalledNumbers}
+          >
+            <Text style={styles.loadMoreText}>View All Called Numbers</Text>
+            <Ionicons name="chevron-forward" size={16} color="#3498db" />
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
   const renderIntervalSlider = () => (
     <View style={styles.intervalContainer}>
       <View style={styles.intervalHeader}>
@@ -976,12 +1258,11 @@ const HostGameRoom = ({ navigation, route }) => {
         </View>
       </View>
       
-      {/* Custom Slider */}
       <CustomSlider
         value={intervalSeconds}
         onValueChange={setIntervalSeconds}
-        min={8}
-        max={15}
+        min={5}
+        max={30}
         step={1}
         disabled={updatingInterval || hasPendingClaims}
       />
@@ -1031,9 +1312,17 @@ const HostGameRoom = ({ navigation, route }) => {
     );
   }
 
-  const isInitialized = numberCallingStatus?.is_initialized;
-  const isRunning = numberCallingStatus?.is_running;
-  const isPaused = numberCallingStatus?.is_paused;
+  const isInitialized = numberCallingStatus?.auto_mode || false;
+  const isRunning = numberCallingStatus?.is_running || false;
+  const isPaused = numberCallingStatus?.is_paused || false;
+
+  console.log(`[Game ${gameId}] 🎨 Rendering with state:`, {
+    isInitialized,
+    isRunning,
+    isPaused,
+    hasPendingClaims,
+    calledNumbersCount: calledNumbers.length
+  });
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -1063,7 +1352,6 @@ const HostGameRoom = ({ navigation, route }) => {
         </View>
         
         <View style={styles.headerButtons}>
-          {/* End Game Button */}
           <TouchableOpacity
             style={[styles.headerActionButton, styles.endGameButton]}
             onPress={endGame}
@@ -1079,7 +1367,6 @@ const HostGameRoom = ({ navigation, route }) => {
             )}
           </TouchableOpacity>
           
-          {/* Claims Button */}
           <TouchableOpacity
             style={[styles.headerActionButton, styles.claimRequestsButton]}
             onPress={navigateToClaimRequests}
@@ -1176,6 +1463,7 @@ const HostGameRoom = ({ navigation, route }) => {
           </TouchableOpacity>
         </View>
 
+        {/* Manual call card - only shown when initialized */}
         {isInitialized && (
           <Animated.View style={[
             styles.manualCallCard,
@@ -1248,6 +1536,7 @@ const HostGameRoom = ({ navigation, route }) => {
           </Animated.View>
         )}
 
+        {/* Auto mode controls */}
         {!isInitialized ? (
           <View style={[styles.controlCard, hasPendingClaims && styles.disabledCard]}>
             <View style={styles.controlHeader}>
@@ -1257,7 +1546,7 @@ const HostGameRoom = ({ navigation, route }) => {
               </Text>
             </View>
             <Text style={[styles.controlDescription, hasPendingClaims && styles.disabledText]}>
-              Initialize the number calling system to start calling numbers automatically with 60 seconds interval.
+              Initialize the number calling system to start calling numbers automatically.
             </Text>
             <TouchableOpacity
               style={[
@@ -1282,7 +1571,7 @@ const HostGameRoom = ({ navigation, route }) => {
                 <>
                   <Ionicons name="rocket-outline" size={18} color="#FFF" />
                   <Text style={styles.controlButtonText}>
-                    {hasPendingClaims ? "Pending Claims" : "Initialize System (60s)"}
+                    {hasPendingClaims ? "Pending Claims" : "Initialize System"}
                   </Text>
                 </>
               )}
@@ -1313,7 +1602,7 @@ const HostGameRoom = ({ navigation, route }) => {
               onPress={hasPendingClaims ? () => {
                 Alert.alert(
                   "Pending Claims",
-                  `You have ${pendingClaimsCount} pending claim${pendingClaimsCount !== 1 ? 's' : ''}. Please resolve all claims before resuming number calling.`,
+                  `You have ${pendingClaimsCount} pending claim${pendingClaimsCount !== 1 ? 's' : ''}. Please resolve all claims before pausing.`,
                   [
                     { text: "View Claims", onPress: navigateToClaimRequests },
                     { text: "OK", style: "default" }
@@ -1345,7 +1634,7 @@ const HostGameRoom = ({ navigation, route }) => {
             <Text style={[styles.controlDescription, hasPendingClaims && styles.disabledText]}>
               {hasPendingClaims 
                 ? `Auto number calling is paused due to ${pendingClaimsCount} pending claim${pendingClaimsCount !== 1 ? 's' : ''}.`
-                : "Auto number calling is currently paused. Tap resume to continue calling numbers automatically."}
+                : "Auto number calling is currently paused. Tap resume to continue."}
             </Text>
             
             {renderIntervalSlider()}
@@ -1355,7 +1644,7 @@ const HostGameRoom = ({ navigation, route }) => {
               onPress={hasPendingClaims ? () => {
                 Alert.alert(
                   "Pending Claims",
-                  `You have ${pendingClaimsCount} pending claim${pendingClaimsCount !== 1 ? 's' : ''}. Please resolve all claims before resuming number calling.`,
+                  `You have ${pendingClaimsCount} pending claim${pendingClaimsCount !== 1 ? 's' : ''}. Please resolve all claims before resuming.`,
                   [
                     { text: "View Claims", onPress: navigateToClaimRequests },
                     { text: "OK", style: "default" }
@@ -1401,7 +1690,7 @@ const HostGameRoom = ({ navigation, route }) => {
               onPress={hasPendingClaims ? () => {
                 Alert.alert(
                   "Pending Claims",
-                  `You have ${pendingClaimsCount} pending claim${pendingClaimsCount !== 1 ? 's' : ''}. Please resolve all claims before starting auto number calling.`,
+                  `You have ${pendingClaimsCount} pending claim${pendingClaimsCount !== 1 ? 's' : ''}. Please resolve all claims before starting.`,
                   [
                     { text: "View Claims", onPress: navigateToClaimRequests },
                     { text: "OK", style: "default" }
@@ -1424,42 +1713,7 @@ const HostGameRoom = ({ navigation, route }) => {
           </View>
         )}
 
-        {calledNumbers.length > 0 && (
-          <View style={styles.lastCalledCard}>
-            <View style={styles.lastCalledHeader}>
-              <Ionicons name="megaphone-outline" size={24} color="#9C27B0" />
-              <Text style={styles.lastCalledTitle}>Last Called Number</Text>
-            </View>
-            
-            <View style={styles.lastNumberContainer}>
-              <Text style={styles.lastNumber}>
-                {calledNumbers[calledNumbers.length - 1]}
-              </Text>
-            </View>
-            
-            <View style={styles.calledSequence}>
-              <Text style={styles.calledSequenceTitle}>Recently Called:</Text>
-              <View style={styles.calledSequenceNumbers}>
-                {calledNumbers.slice(-5).reverse().map((num, index) => (
-                  <View
-                    key={index}
-                    style={styles.sequenceNumber}
-                  >
-                    <Text style={styles.sequenceNumberText}>{num}</Text>
-                  </View>
-                ))}
-              </View>
-              
-              <TouchableOpacity
-                style={styles.loadMoreButton}
-                onPress={navigateToCalledNumbers}
-              >
-                <Text style={styles.loadMoreText}>View All Called Numbers</Text>
-                <Ionicons name="chevron-forward" size={16} color="#3498db" />
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
+        {renderLastCalledSection()}
 
         <View style={styles.numbersSection}>
           <View style={styles.sectionHeader}>
@@ -1555,7 +1809,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#3498db",
     flexDirection: "row",
     alignItems: "center",
-    paddingTop: 20,
+    paddingTop: Platform.OS === 'ios' ? 20 : 20,
     paddingBottom: 20,
     paddingHorizontal: 20,
     borderBottomLeftRadius: 25,
@@ -1925,7 +2179,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "600",
   },
-  // Custom Slider Styles
   sliderContainer: {
     marginVertical: 10,
   },
@@ -1996,22 +2249,6 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#3498db',
   },
-  sliderMarks: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 6,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  sliderMark: {
-    width: 2,
-    height: 6,
-    backgroundColor: 'rgba(0,0,0,0.1)',
-    position: 'absolute',
-  },
-  // Interval Container
   intervalContainer: {
     backgroundColor: "#F8FAFC",
     borderRadius: 12,

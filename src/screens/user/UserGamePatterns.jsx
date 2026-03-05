@@ -15,11 +15,26 @@ import {
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Icon from 'react-native-vector-icons/Ionicons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
+import FontAwesome from 'react-native-vector-icons/FontAwesome';
 import { useNavigation } from '@react-navigation/native';
 
 const { width, height } = Dimensions.get('window');
 const TICKET_WIDTH = Math.min(width, height) - 100;
 const CELL_SIZE = (TICKET_WIDTH - 60) / 9;
+
+// Updated Color scheme matching Home page
+const PRIMARY_COLOR = "#4facfe"; // Main blue color
+const ACCENT_COLOR = "#ff9800"; // Orange accent
+const BACKGROUND_COLOR = "#f5f8ff"; // Light background
+const WHITE = "#FFFFFF";
+const TEXT_DARK = "#333333";
+const TEXT_LIGHT = "#777777";
+const BORDER_COLOR = "#EEEEEE";
+const CARD_BACKGROUND = "#FFFFFF";
+const SUCCESS_COLOR = "#4CAF50";
+const WARNING_COLOR = "#ff9800";
+const ERROR_COLOR = "#f44336";
 
 const UserGamePatterns = () => {
   const navigation = useNavigation();
@@ -105,7 +120,9 @@ const UserGamePatterns = () => {
 
       if (response.data && response.data.status) {
         const patternsData = response.data.data?.patterns || [];
-        setPatterns(patternsData);
+        // Sort patterns by sequence
+        const sortedPatterns = sortPatternsBySequence(patternsData);
+        setPatterns(sortedPatterns);
         setError(null);
       } else {
         throw new Error('Failed to fetch patterns');
@@ -116,6 +133,40 @@ const UserGamePatterns = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Sort patterns by specific sequence
+  const sortPatternsBySequence = (patternsData) => {
+    const patternSequence = [
+      { keywords: ['top line', 'topline', 'top-line'] },
+      { keywords: ['middle line', 'middleline', 'middle-line'] },
+      { keywords: ['bottom line', 'bottomline', 'bottom-line'] },
+      { keywords: ['breakfast'] },
+      { keywords: ['lunch'] },
+      { keywords: ['dinner'] },
+      { keywords: ['four corners', '4 corners', 'fourcorners'] },
+      { keywords: ['bamboo'] },
+      { keywords: ['early five', 'early 5', 'earlyfive'] },
+      { keywords: ['non claimers', 'nonclaimers', 'non-claimers'] },
+      { keywords: ['full house', 'fullhouse'] }
+    ];
+
+    const getPatternIndex = (pattern) => {
+      const patternName = (pattern.display_name || pattern.pattern_name || '').toLowerCase();
+      
+      for (let i = 0; i < patternSequence.length; i++) {
+        if (patternSequence[i].keywords.some(keyword => patternName.includes(keyword))) {
+          return i;
+        }
+      }
+      return patternSequence.length; // Put unknown patterns at the end
+    };
+
+    return [...patternsData].sort((a, b) => {
+      const aIndex = getPatternIndex(a);
+      const bIndex = getPatternIndex(b);
+      return aIndex - bIndex;
+    });
   };
 
   // Generate valid tambola ticket with exactly 5 numbers per row
@@ -301,10 +352,112 @@ const UserGamePatterns = () => {
     return logicType === 'position_based' || pattern.is_position_based;
   };
 
+  // Updated function with all 11 specific Tambola patterns
+  const getPatternIcon = (pattern) => {
+    const patternName = pattern.display_name?.toLowerCase() || pattern.pattern_name?.toLowerCase() || '';
+    
+    // Bamboo pattern
+    if (patternName.includes('bamboo')) {
+      return 'leaf'; // Changed to match Home page
+    }
+    
+    // Bottom Line pattern
+    if (patternName.includes('bottom line')) {
+      return 'arrow-down'; // Changed to match Home page
+    }
+    
+    // Breakfast pattern
+    if (patternName.includes('breakfast')) {
+      return 'cafe'; // Changed to match Home page
+    }
+    
+    // Dinner pattern
+    if (patternName.includes('dinner')) {
+      return 'restaurant'; // Changed to match Home page
+    }
+    
+    // Early Five pattern
+    if (patternName.includes('early five') || patternName.includes('early 5')) {
+      return 'numeric-5-circle'; // Changed to match Home page style
+    }
+    
+    // Four Corners pattern
+    if (patternName.includes('four corners') || patternName.includes('4 corners')) {
+      return 'apps'; // Changed to match Home page
+    }
+    
+    // Full House pattern
+    if (patternName.includes('full house')) {
+      return 'home'; // Matches Home page
+    }
+    
+    // Lunch pattern
+    if (patternName.includes('lunch')) {
+      return 'food'; // Changed to match Home page style
+    }
+    
+    // Middle Line pattern
+    if (patternName.includes('middle line')) {
+      return 'arrow-left-right'; // Changed to match Home page style
+    }
+    
+    // Non Claimer pattern
+    if (patternName.includes('non claimer')) {
+      return 'close-circle'; // Changed to match Home page style
+    }
+    
+    // Top Line pattern
+    if (patternName.includes('top line')) {
+      return 'arrow-up'; // Changed to match Home page
+    }
+    
+    // Default based on logic type
+    const logicType = getPatternLogicType(pattern);
+    switch (logicType) {
+      case 'position_based':
+        return 'grid';
+      case 'count_based':
+        return 'counter';
+      case 'all_numbers':
+        return 'check-all';
+      case 'row_complete':
+        return 'format-line-weight';
+      case 'number_based':
+        return 'calculator';
+      case 'number_range':
+        return 'filter';
+      default:
+        return 'ticket-confirmation';
+    }
+  };
+
+  const getPatternColor = () => {
+    return ACCENT_COLOR; // Use accent color for consistency
+  };
+
+  const formatPatternName = (name) => {
+    if (!name) return 'Unknown Pattern';
+    return name
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
+  const formatLogicType = (type) => {
+    if (!type || type === 'unknown') return 'Pattern';
+    return type
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  };
+
   const renderPatternCard = (pattern) => {
     if (!pattern) return null;
     
     const isPositionBased = isPositionBasedPattern(pattern);
+    const icon = getPatternIcon(pattern);
+    const color = getPatternColor();
+    const displayName = pattern.display_name || formatPatternName(pattern.pattern_name);
     
     return (
       <TouchableOpacity
@@ -320,34 +473,30 @@ const UserGamePatterns = () => {
         activeOpacity={0.7}
       >
         <View style={styles.patternHeader}>
-          <View style={styles.patternIcon}>
-            <Icon 
-              name={getPatternIcon(getPatternLogicType(pattern))} 
-              size={24} 
-              color="#FF7675" 
-            />
+          <View style={[styles.patternIcon, { backgroundColor: color + '20' }]}>
+            <MaterialCommunityIcons name={icon} size={26} color={color} />
           </View>
           <View style={styles.patternInfo}>
             <View style={styles.patternNameRow}>
               <Text style={styles.patternName} numberOfLines={1}>
-                {pattern.display_name || formatPatternName(pattern.pattern_name)}
+                {displayName}
               </Text>
             </View>
             <View style={styles.patternMeta}>
               <View style={[
                 styles.typeBadge,
-                { backgroundColor: getPatternColor(getPatternLogicType(pattern)) + '20' }
+                { backgroundColor: color + '20' }
               ]}>
                 <Text style={[
                   styles.typeText,
-                  { color: getPatternColor(getPatternLogicType(pattern)) }
+                  { color: color }
                 ]}>
                   {formatLogicType(getPatternLogicType(pattern))}
                 </Text>
               </View>
               {isPositionBased && getPatternPositions(pattern).length > 0 && (
                 <View style={styles.positionsBadge}>
-                  <Icon name="grid" size={12} color="#666" />
+                  <MaterialCommunityIcons name="grid" size={12} color={TEXT_LIGHT} />
                   <Text style={styles.positionsText}>
                     {getPatternPositions(pattern).length} positions
                   </Text>
@@ -355,7 +504,7 @@ const UserGamePatterns = () => {
               )}
             </View>
           </View>
-          <Icon name="chevron-forward" size={20} color="#999" />
+          <MaterialCommunityIcons name="chevron-right" size={20} color={TEXT_LIGHT} />
         </View>
         
         <Text style={styles.patternDescription} numberOfLines={2}>
@@ -501,64 +650,10 @@ const UserGamePatterns = () => {
     return position;
   };
 
-  const getPatternIcon = (logicType) => {
-    switch (logicType) {
-      case 'position_based':
-        return 'grid-outline';
-      case 'count_based':
-        return 'stats-chart-outline';
-      case 'all_numbers':
-        return 'checkbox-outline';
-      case 'row_complete':
-        return 'reorder-three-outline';
-      case 'number_based':
-        return 'calculator-outline';
-      case 'number_range':
-        return 'funnel-outline';
-      default:
-        return 'help-circle-outline';
-    }
-  };
-
-  const getPatternColor = (logicType) => {
-    switch (logicType) {
-      case 'position_based':
-        return '#3498db';
-      case 'count_based':
-        return '#FF9800';
-      case 'all_numbers':
-        return '#4CAF50';
-      case 'row_complete':
-        return '#9C27B0';
-      case 'number_based':
-        return '#F44336';
-      case 'number_range':
-        return '#607D8B';
-      default:
-        return '#666';
-    }
-  };
-
-  const formatPatternName = (name) => {
-    if (!name) return 'Unknown Pattern';
-    return name
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
-  const formatLogicType = (type) => {
-    if (!type || type === 'unknown') return 'Pattern';
-    return type
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#3498db" />
+        <ActivityIndicator size="large" color={PRIMARY_COLOR} />
         <Text style={styles.loadingText}>Loading patterns...</Text>
       </View>
     );
@@ -568,11 +663,11 @@ const UserGamePatterns = () => {
     return (
       <View style={styles.errorContainer}>
         <View style={styles.errorContent}>
-          <Icon name="alert-circle-outline" size={60} color="#F44336" />
+          <MaterialCommunityIcons name="alert-circle-outline" size={60} color={ERROR_COLOR} />
           <Text style={styles.errorTitle}>Patterns Error</Text>
           <Text style={styles.errorMessage}>{error}</Text>
           <TouchableOpacity style={styles.retryButton} onPress={fetchPatterns}>
-            <Icon name="refresh" size={16} color="#FFF" />
+            <MaterialCommunityIcons name="refresh" size={16} color={WHITE} />
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
@@ -582,14 +677,14 @@ const UserGamePatterns = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar backgroundColor="#3498db" barStyle="light-content" />
-      
+      <StatusBar backgroundColor={PRIMARY_COLOR} barStyle="light-content" />
+
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color="#FFF" />
+          <MaterialCommunityIcons name="arrow-left" size={24} color={WHITE} />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
           <Text style={styles.headerTitle}>Tambola Patterns</Text>
@@ -601,7 +696,7 @@ const UserGamePatterns = () => {
         style={styles.container}
         showsVerticalScrollIndicator={false}
         refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#3498db" />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={PRIMARY_COLOR} />
         }
       >
         <ScrollView 
@@ -638,7 +733,7 @@ const UserGamePatterns = () => {
               style={styles.clearButton} 
               onPress={() => setSelectedFilter('all')}
             >
-              <Icon name="close-circle" size={16} color="#3498db" />
+              <MaterialCommunityIcons name="close-circle" size={16} color={ACCENT_COLOR} />
               <Text style={styles.clearButtonText}>Clear Filter</Text>
             </TouchableOpacity>
           )}
@@ -649,7 +744,7 @@ const UserGamePatterns = () => {
             filteredPatterns.map(renderPatternCard)
           ) : patterns.length > 0 ? (
             <View style={styles.emptyState}>
-              <Icon name="search-outline" size={60} color="#CCC" />
+              <MaterialCommunityIcons name="search-outline" size={60} color={TEXT_LIGHT} />
               <Text style={styles.emptyStateTitle}>No Patterns Found</Text>
               <Text style={styles.emptyStateText}>
                 Try changing the filter
@@ -657,7 +752,7 @@ const UserGamePatterns = () => {
             </View>
           ) : (
             <View style={styles.emptyState}>
-              <Icon name="grid-outline" size={60} color="#CCC" />
+              <MaterialCommunityIcons name="grid-outline" size={60} color={TEXT_LIGHT} />
               <Text style={styles.emptyStateTitle}>No Patterns Available</Text>
               <Text style={styles.emptyStateText}>
                 Patterns will be available when games start
@@ -689,12 +784,12 @@ const UserGamePatterns = () => {
                     <View style={styles.modalTitleRow}>
                       <View style={[
                         styles.modalIcon,
-                        { backgroundColor: getPatternColor(getPatternLogicType(selectedPattern)) + '20' }
+                        { backgroundColor: ACCENT_COLOR + '20' }
                       ]}>
-                        <Icon 
-                          name={getPatternIcon(getPatternLogicType(selectedPattern))} 
+                        <MaterialCommunityIcons 
+                          name={getPatternIcon(selectedPattern)} 
                           size={24} 
-                          color={getPatternColor(getPatternLogicType(selectedPattern))} 
+                          color={ACCENT_COLOR} 
                         />
                       </View>
                       <Text style={styles.modalTitle} numberOfLines={2}>
@@ -704,18 +799,18 @@ const UserGamePatterns = () => {
                     <View style={styles.modalMetaRow}>
                       <View style={[
                         styles.modalTypeBadge,
-                        { backgroundColor: getPatternColor(getPatternLogicType(selectedPattern)) + '20' }
+                        { backgroundColor: ACCENT_COLOR + '20' }
                       ]}>
                         <Text style={[
                           styles.modalTypeText,
-                          { color: getPatternColor(getPatternLogicType(selectedPattern)) }
+                          { color: ACCENT_COLOR }
                         ]}>
                           {formatLogicType(getPatternLogicType(selectedPattern))}
                         </Text>
                       </View>
                       {selectedPattern.popular_rank && (
                         <View style={styles.popularityBadge}>
-                          <Icon name="star" size={12} color="#FFD700" />
+                          <FontAwesome name="star" size={12} color={ACCENT_COLOR} />
                           <Text style={styles.popularityText}>
                             {selectedPattern.popular_rank}
                           </Text>
@@ -727,7 +822,7 @@ const UserGamePatterns = () => {
                     style={styles.closeButton}
                     onPress={() => setModalVisible(false)}
                   >
-                    <Icon name="close" size={24} color="#666" />
+                    <MaterialCommunityIcons name="close" size={24} color={TEXT_LIGHT} />
                   </TouchableOpacity>
                 </View>
 
@@ -771,7 +866,7 @@ const UserGamePatterns = () => {
                         <Text style={styles.sectionTitle}>Pattern Positions</Text>
                         {getPatternPositions(selectedPattern).map((pos, index) => (
                           <View key={index} style={styles.positionItem}>
-                            <View style={styles.positionBadge}>
+                            <View style={[styles.positionBadge, { backgroundColor: ACCENT_COLOR }]}>
                               <Text style={styles.positionBadgeText}>
                                 {pos.row}-{pos.position}
                               </Text>
@@ -788,7 +883,7 @@ const UserGamePatterns = () => {
                   {!isPositionBasedPattern(selectedPattern) && (
                     <View style={styles.infoCard}>
                       <View style={styles.infoHeader}>
-                        <Icon name="information-circle" size={20} color="#3498db" />
+                        <MaterialCommunityIcons name="information" size={20} color={ACCENT_COLOR} />
                         <Text style={styles.infoTitle}>How it works</Text>
                       </View>
                       <Text style={styles.infoText}>
@@ -838,28 +933,28 @@ const UserGamePatterns = () => {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: PRIMARY_COLOR,
   },
   container: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
+    backgroundColor: BACKGROUND_COLOR,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: BACKGROUND_COLOR,
   },
   loadingText: {
     marginTop: 15,
     fontSize: 16,
-    color: '#666',
+    color: TEXT_LIGHT,
   },
   errorContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#F8FAFC',
+    backgroundColor: BACKGROUND_COLOR,
     padding: 30,
   },
   errorContent: {
@@ -868,124 +963,126 @@ const styles = StyleSheet.create({
   errorTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#333',
+    color: TEXT_DARK,
     marginTop: 20,
     marginBottom: 10,
   },
   errorMessage: {
     fontSize: 14,
-    color: '#666',
+    color: TEXT_LIGHT,
     textAlign: 'center',
     marginBottom: 30,
   },
   retryButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#3498db',
+    backgroundColor: PRIMARY_COLOR,
     paddingHorizontal: 25,
     paddingVertical: 12,
     borderRadius: 25,
+    gap: 8,
   },
   retryButtonText: {
-    color: '#FFF',
+    color: WHITE,
     fontSize: 16,
     fontWeight: '600',
-    marginLeft: 8,
   },
   header: {
-    paddingTop: 20,
-    paddingBottom: 20,
-    backgroundColor: '#3498db',
-    borderBottomLeftRadius: 25,
-    borderBottomRightRadius: 25,
-    paddingHorizontal: 20,
+    backgroundColor: PRIMARY_COLOR,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
     flexDirection: 'row',
     alignItems: 'center',
   },
   backButton: {
-    marginRight: 15,
-    padding: 4,
+    marginRight: 12,
   },
   headerTitleContainer: {
     flex: 1,
   },
   headerTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#FFF',
-    marginBottom: 4,
+    color: WHITE,
+    fontSize: 20,
+    fontWeight: '700',
   },
   headerSubtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
+    color: WHITE,
+    fontSize: 12,
+    opacity: 0.9,
+    marginTop: 2,
   },
   filtersContainer: {
-    marginTop: 20,
+    marginTop: 16,
     marginBottom: 16,
   },
   filtersContent: {
-    paddingHorizontal: 20,
-    paddingVertical: 4,
+    paddingHorizontal: 16,
+    gap: 8,
   },
   filterButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    marginRight: 10,
+    borderColor: BORDER_COLOR,
+    marginRight: 0,
   },
   filterButtonActive: {
-    backgroundColor: '#3498db',
-    borderColor: '#3498db',
+    backgroundColor: PRIMARY_COLOR,
+    borderColor: PRIMARY_COLOR,
   },
   filterButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#666',
+    color: TEXT_DARK,
   },
   filterButtonTextActive: {
-    color: '#FFF',
+    color: WHITE,
   },
   resultsInfo: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    marginBottom: 16,
+    paddingHorizontal: 16,
+    marginBottom: 12,
   },
   resultsCount: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#333',
+    fontSize: 14,
+    fontWeight: '600',
+    color: TEXT_LIGHT,
   },
   clearButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
   },
   clearButtonText: {
     fontSize: 13,
     fontWeight: '600',
-    color: '#3498db',
+    color: ACCENT_COLOR,
   },
   patternsContainer: {
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
     marginBottom: 20,
   },
   patternCard: {
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     borderRadius: 16,
     padding: 16,
     marginBottom: 12,
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: BORDER_COLOR,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 2,
   },
   selectedPatternCard: {
-    borderColor: '#3498db',
+    borderColor: PRIMARY_COLOR,
     borderWidth: 2,
-    backgroundColor: '#E6F0FF',
+    backgroundColor: WHITE,
   },
   patternHeader: {
     flexDirection: 'row',
@@ -993,7 +1090,14 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   patternIcon: {
+    width: 50,
+    height: 50,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
     marginRight: 12,
+    borderWidth: 2,
+    borderColor: PRIMARY_COLOR,
   },
   patternInfo: {
     flex: 1,
@@ -1007,7 +1111,7 @@ const styles = StyleSheet.create({
   patternName: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: TEXT_DARK,
     flex: 1,
     marginRight: 10,
   },
@@ -1020,6 +1124,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 8,
+    borderWidth: 1,
+    borderColor: PRIMARY_COLOR,
   },
   typeText: {
     fontSize: 10,
@@ -1028,19 +1134,21 @@ const styles = StyleSheet.create({
   positionsBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F5F5F5',
+    backgroundColor: BACKGROUND_COLOR,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 6,
     gap: 4,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
   },
   positionsText: {
     fontSize: 10,
-    color: '#666',
+    color: TEXT_LIGHT,
   },
   patternDescription: {
     fontSize: 14,
-    color: '#666',
+    color: TEXT_LIGHT,
     lineHeight: 20,
     marginBottom: 12,
   },
@@ -1051,15 +1159,10 @@ const styles = StyleSheet.create({
   miniTicket: {
     borderRadius: 12,
     padding: 12,
-    backgroundColor: '#FFF',
+    backgroundColor: BACKGROUND_COLOR,
     width: '100%',
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: BORDER_COLOR,
   },
   miniRow: {
     flexDirection: 'row',
@@ -1069,29 +1172,31 @@ const styles = StyleSheet.create({
   miniCell: {
     width: 28,
     height: 28,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: WHITE,
     justifyContent: 'center',
     alignItems: 'center',
     marginHorizontal: 2,
     borderRadius: 6,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
   },
   miniCellWithNumber: {
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: PRIMARY_COLOR,
   },
   miniCellPattern: {
-    backgroundColor: '#FFF9C4',
+    backgroundColor: ACCENT_COLOR + '20',
     borderWidth: 2,
-    borderColor: '#FFD600',
+    borderColor: ACCENT_COLOR,
   },
   miniCellNumber: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: TEXT_DARK,
   },
   miniCellNumberPattern: {
-    color: '#2C3E50',
+    color: ACCENT_COLOR,
     fontWeight: '800',
   },
   positionExplanation: {
@@ -1100,28 +1205,28 @@ const styles = StyleSheet.create({
   },
   positionExplanationText: {
     fontSize: 11,
-    color: '#666',
+    color: TEXT_LIGHT,
     textAlign: 'center',
     fontStyle: 'italic',
   },
   emptyState: {
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     padding: 40,
     borderRadius: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#F0F0F0',
+    borderColor: BORDER_COLOR,
   },
   emptyStateTitle: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#333',
+    color: TEXT_DARK,
     marginTop: 16,
     marginBottom: 8,
   },
   emptyStateText: {
     fontSize: 14,
-    color: '#666',
+    color: TEXT_LIGHT,
     textAlign: 'center',
   },
   bottomSpace: {
@@ -1137,11 +1242,18 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.5)',
   },
   modalContent: {
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     borderTopLeftRadius: 25,
     borderTopRightRadius: 25,
     maxHeight: '85%',
     minHeight: '50%',
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1150,7 +1262,7 @@ const styles = StyleSheet.create({
     padding: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
+    borderBottomColor: BORDER_COLOR,
   },
   modalTitleContainer: {
     flex: 1,
@@ -1163,15 +1275,17 @@ const styles = StyleSheet.create({
   modalIcon: {
     width: 40,
     height: 40,
-    borderRadius: 20,
+    borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    borderWidth: 2,
+    borderColor: PRIMARY_COLOR,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: '800',
-    color: '#333',
+    color: TEXT_DARK,
     flex: 1,
   },
   modalMetaRow: {
@@ -1185,6 +1299,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
+    borderWidth: 1,
+    borderColor: PRIMARY_COLOR,
   },
   modalTypeText: {
     fontSize: 12,
@@ -1193,17 +1309,17 @@ const styles = StyleSheet.create({
   popularityBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#FFF3CD',
+    backgroundColor: BACKGROUND_COLOR,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     gap: 4,
     borderWidth: 1,
-    borderColor: '#FFEAA7',
+    borderColor: BORDER_COLOR,
   },
   popularityText: {
     fontSize: 11,
-    color: '#856404',
+    color: ACCENT_COLOR,
     fontWeight: '600',
   },
   closeButton: {
@@ -1221,7 +1337,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: TEXT_DARK,
     marginBottom: 12,
   },
   descriptionSection: {
@@ -1229,34 +1345,34 @@ const styles = StyleSheet.create({
   },
   descriptionText: {
     fontSize: 15,
-    color: '#666',
+    color: TEXT_LIGHT,
     lineHeight: 22,
   },
   exampleSection: {
     marginBottom: 20,
-    backgroundColor: '#F8F9FA',
+    backgroundColor: BACKGROUND_COLOR,
     padding: 16,
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#3498db',
+    borderLeftColor: PRIMARY_COLOR,
   },
   exampleText: {
     fontSize: 14,
-    color: '#495057',
+    color: TEXT_DARK,
     fontStyle: 'italic',
     lineHeight: 20,
   },
   winSection: {
     marginBottom: 20,
-    backgroundColor: '#F0F9F0',
+    backgroundColor: BACKGROUND_COLOR,
     padding: 16,
     borderRadius: 12,
     borderLeftWidth: 4,
-    borderLeftColor: '#4CAF50',
+    borderLeftColor: SUCCESS_COLOR,
   },
   winText: {
     fontSize: 14,
-    color: '#2E7D32',
+    color: TEXT_DARK,
     fontWeight: '500',
     lineHeight: 20,
   },
@@ -1264,12 +1380,12 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   fullTicketContainer: {
-    backgroundColor: '#F8FAFC',
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: BORDER_COLOR,
     alignItems: 'center',
   },
   ticketHeader: {
@@ -1282,12 +1398,12 @@ const styles = StyleSheet.create({
   ticketTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#333',
+    color: TEXT_DARK,
     flex: 1,
   },
   ticketSubtitle: {
     fontSize: 13,
-    color: '#666',
+    color: TEXT_LIGHT,
     marginBottom: 16,
     textAlign: 'center',
     width: '100%',
@@ -1295,15 +1411,10 @@ const styles = StyleSheet.create({
   fullTicket: {
     borderRadius: 12,
     padding: 12,
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    borderColor: BORDER_COLOR,
     width: TICKET_WIDTH,
     alignSelf: 'center',
   },
@@ -1315,37 +1426,39 @@ const styles = StyleSheet.create({
   fullCell: {
     width: CELL_SIZE,
     height: CELL_SIZE,
-    backgroundColor: '#F5F5F5',
+    backgroundColor: BACKGROUND_COLOR,
     marginHorizontal: 2,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
     position: 'relative',
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
   },
   fullCellWithNumber: {
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: PRIMARY_COLOR,
   },
   fullCellPattern: {
-    backgroundColor: '#FFF9C4',
+    backgroundColor: ACCENT_COLOR + '20',
     borderWidth: 2,
-    borderColor: '#FFD600',
+    borderColor: ACCENT_COLOR,
   },
   fullCellNumber: {
     fontSize: CELL_SIZE * 0.3,
     fontWeight: '600',
-    color: '#2C3E50',
+    color: TEXT_DARK,
   },
   fullCellNumberPattern: {
-    color: '#2C3E50',
+    color: ACCENT_COLOR,
     fontWeight: '800',
   },
   positionIndicator: {
     position: 'absolute',
     top: 2,
     right: 2,
-    backgroundColor: '#FFD600',
+    backgroundColor: ACCENT_COLOR,
     borderRadius: 6,
     width: 16,
     height: 16,
@@ -1355,7 +1468,7 @@ const styles = StyleSheet.create({
   positionIndicatorText: {
     fontSize: 8,
     fontWeight: '800',
-    color: '#333',
+    color: WHITE,
   },
   positionsList: {
     marginBottom: 20,
@@ -1366,20 +1479,19 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   positionBadge: {
-    backgroundColor: '#3498db',
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 12,
     marginRight: 10,
   },
   positionBadgeText: {
-    color: '#FFF',
+    color: WHITE,
     fontSize: 12,
     fontWeight: '700',
   },
   positionText: {
     fontSize: 14,
-    color: '#666',
+    color: TEXT_LIGHT,
     flex: 1,
   },
   ticketLegend: {
@@ -1400,32 +1512,32 @@ const styles = StyleSheet.create({
     borderRadius: 6,
   },
   legendColorPattern: {
-    backgroundColor: '#FFF9C4',
+    backgroundColor: ACCENT_COLOR + '20',
     borderWidth: 2,
-    borderColor: '#FFD600',
+    borderColor: ACCENT_COLOR,
   },
   legendColorNormal: {
-    backgroundColor: '#FFF',
+    backgroundColor: WHITE,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: PRIMARY_COLOR,
   },
   legendColorEmpty: {
-    backgroundColor: '#F5F5F5',
+    backgroundColor: BACKGROUND_COLOR,
     borderWidth: 1,
-    borderColor: '#E0E0E0',
+    borderColor: BORDER_COLOR,
   },
   legendText: {
     fontSize: 12,
-    color: '#666',
+    color: TEXT_LIGHT,
     textAlign: 'center',
   },
   infoCard: {
-    backgroundColor: '#E6F0FF',
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 12,
     padding: 16,
     marginBottom: 20,
     borderWidth: 1,
-    borderColor: '#D6E4FF',
+    borderColor: BORDER_COLOR,
   },
   infoHeader: {
     flexDirection: 'row',
@@ -1435,19 +1547,19 @@ const styles = StyleSheet.create({
   infoTitle: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#333',
+    color: TEXT_DARK,
     marginLeft: 8,
   },
   infoText: {
     fontSize: 14,
-    color: '#666',
+    color: TEXT_LIGHT,
     lineHeight: 20,
     marginBottom: 12,
   },
   modalFooter: {
     flexDirection: 'row',
     borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
+    borderTopColor: BORDER_COLOR,
     padding: 16,
     gap: 12,
   },
@@ -1456,13 +1568,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingVertical: 12,
-    backgroundColor: '#F5F5F5',
-    borderRadius: 12,
+    backgroundColor: PRIMARY_COLOR,
+    borderRadius: 10,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   closeModalButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#666',
+    color: WHITE,
   },
   modalBottomSpace: {
     height: 20,

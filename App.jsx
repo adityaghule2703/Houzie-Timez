@@ -80,22 +80,24 @@ function UserTabs({ onLogout }) {
           }
           return <FontAwesome name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#D4AF37', // Changed to #005F6A
-        tabBarInactiveTintColor: '#7A8B8C', // Optional: You can adjust inactive color too
+        tabBarActiveTintColor: '#4facfe', // Changed to match PRIMARY_COLOR (blue)
+        tabBarInactiveTintColor: '#777777', // Changed to match TEXT_LIGHT
         tabBarLabelStyle: {
           fontSize: 11,
           marginBottom: 2,
+          fontWeight: '500',
         },
         tabBarStyle: {
           height: 60,
           paddingBottom: 10,
           paddingTop: 5,
-          backgroundColor: '#242627', // Added background color
-          borderTopWidth: 0, // Optional: remove border
-          elevation: 8, // For Android shadow
-          shadowColor: '#000', // For iOS shadow
+          backgroundColor: '#FFFFFF', // Changed to WHITE
+          borderTopWidth: 1, // Added border
+          borderTopColor: '#EEEEEE', // Changed to BORDER_COLOR
+          elevation: 8,
+          shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
+          shadowOpacity: 0.05,
           shadowRadius: 4,
         },
       })}
@@ -111,7 +113,6 @@ function UserTabs({ onLogout }) {
   );
 }
 
-// Host Tabs Component
 // Host Tabs Component
 function HostTabs({ onLogout }) {
   return (
@@ -134,7 +135,7 @@ function HostTabs({ onLogout }) {
           }
           return <FontAwesome name={iconName} size={size} color={color} />;
         },
-        tabBarActiveTintColor: '#FF7675', // Changed to #FF7675
+        tabBarActiveTintColor: '#3498db',
         tabBarInactiveTintColor: 'gray',
         tabBarLabelStyle: {
           fontSize: 11,

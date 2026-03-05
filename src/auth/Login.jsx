@@ -24,14 +24,15 @@ import messaging from "@react-native-firebase/messaging";
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Color scheme from Faqs component
-const PRIMARY_COLOR = "#005F6A";
-const SECONDARY_COLOR = "#004B54";
-const ACCENT_COLOR = "#D4AF37";
-const LIGHT_ACCENT = "#F5E6A8";
-const MUTED_GOLD = "#E6D8A2";
-const DARK_TEAL = "#00343A";
+// Updated color scheme matching Home component
+const PRIMARY_COLOR = "#4facfe"; // Main blue color
+const ACCENT_COLOR = "#ff9800"; // Orange accent
+const BACKGROUND_COLOR = "#f5f8ff"; // Light background
 const WHITE = "#FFFFFF";
+const TEXT_DARK = "#333333";
+const TEXT_LIGHT = "#777777";
+const BORDER_COLOR = "#EEEEEE";
+const CARD_BACKGROUND = "#FFFFFF";
 
 const Login = ({ navigation, onLoginSuccess }) => {
   const [mobile, setMobile] = useState("");
@@ -46,80 +47,56 @@ const Login = ({ navigation, onLoginSuccess }) => {
   const cardSlide = useRef(new Animated.Value(30)).current;
   const buttonScale = useRef(new Animated.Value(1)).current;
 
-  // Request notification permission and get FCM token
-  const requestNotificationPermission = async () => {
+  // Request notification permission and get FCM token (only once)
+  const initializeFCM = async () => {
     try {
+      console.log("📱 Initializing FCM...");
+      
+      // Check if we already have a token
+      let token = await AsyncStorage.getItem("deviceFcmToken");
+      
+      if (token) {
+        console.log("✅ Found existing FCM token:", token.substring(0, 20) + "...");
+        setFcmToken(token);
+        return token;
+      }
+      
+      // Request permission
       if (Platform.OS === 'android') {
-        const result = await PermissionsAndroid.request(
+        const granted = await PermissionsAndroid.request(
           PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS
         );
         
-        console.log("Notification permission result:", result);
-        
-        if (result === PermissionsAndroid.RESULTS.GRANTED) {
-          await getFCMToken();
-        } else {
-          Alert.alert(
-            "Notification Permission",
-            "You may not receive notifications for games and updates.",
-            [{ text: "OK" }]
-          );
-          await getFCMToken();
+        if (granted !== PermissionsAndroid.RESULTS.GRANTED) {
+          console.log("❌ Notification permission denied");
+          return null;
         }
       } else {
         const authStatus = await messaging().requestPermission();
-        const enabled =
-          authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
-          authStatus === messaging.AuthorizationStatus.PROVISIONAL;
-          
-        if (enabled) {
-          await getFCMToken();
+        const enabled = authStatus === messaging.AuthorizationStatus.AUTHORIZED ||
+                       authStatus === messaging.AuthorizationStatus.PROVISIONAL;
+        
+        if (!enabled) {
+          console.log("❌ Notification permission denied");
+          return null;
         }
       }
-    } catch (error) {
-      console.log("Notification permission error:", error);
-    }
-  };
-
-  // Get FCM token
-  const getFCMToken = async () => {
-    try {
+      
+      // Get token
       await messaging().registerDeviceForRemoteMessages();
-      const token = await messaging().getToken();
+      token = await messaging().getToken();
       
       if (token) {
+        console.log("✅ New FCM token generated:", token.substring(0, 20) + "...");
+        await AsyncStorage.setItem("deviceFcmToken", token);
         setFcmToken(token);
-        
-        messaging().onTokenRefresh(async (refreshedToken) => {
-          setFcmToken(refreshedToken);
-          
-          try {
-            const userRole = await AsyncStorage.getItem("userRole");
-            const storedToken = await AsyncStorage.getItem("token");
-            
-            if (storedToken && userRole) {
-              console.log("Token refreshed, should update on server");
-            }
-          } catch (error) {
-            console.log("Error handling token refresh:", error);
-          }
-        });
+        return token;
       }
-    } catch (error) {
-      console.log("Error getting FCM token:", error);
-    }
-  };
-
-  // Check if app was opened from a quit state via notification
-  const checkInitialNotification = async () => {
-    try {
-      const initialNotification = await messaging().getInitialNotification();
       
-      if (initialNotification) {
-        console.log('Notification caused app to open from quit state:', initialNotification);
-      }
+      return null;
     } catch (error) {
-      console.log("Error checking initial notification:", error);
+      console.log("❌ FCM initialization error:", error);
+      return null;
     }
   };
 
@@ -138,40 +115,53 @@ const Login = ({ navigation, onLoginSuccess }) => {
       }),
     ]).start();
 
-    // Request notification permissions and get FCM token
-    requestNotificationPermission();
-    
-    // Check for initial notification
-    checkInitialNotification();
+    // Initialize FCM once when component mounts
+    initializeFCM();
 
-    // Set up foreground notification handler
+    // Handle token refresh (this happens automatically, just log it)
+    const unsubscribeTokenRefresh = messaging().onTokenRefresh(async (newToken) => {
+      console.log("🔄 FCM token refreshed:", newToken.substring(0, 20) + "...");
+      await AsyncStorage.setItem("deviceFcmToken", newToken);
+      setFcmToken(newToken);
+      
+      // If user is logged in, update token on server
+      const userRole = await AsyncStorage.getItem("userRole");
+      const authToken = await AsyncStorage.getItem("token");
+      
+      if (userRole && authToken) {
+        console.log(`📤 Updating refreshed token for role ${userRole} on server...`);
+        updateTokenOnServer(newToken, userRole, authToken);
+      }
+    });
+
+    // Handle foreground messages
     const unsubscribeForeground = messaging().onMessage(async remoteMessage => {
-      Alert.alert(
-        remoteMessage.notification?.title || 'New Notification',
-        remoteMessage.notification?.body || 'You have a new notification',
-        [
-          { text: 'OK', onPress: () => console.log('OK Pressed') },
-        ]
-      );
-    });
-
-    // Set up background/quit state notification handler
-    messaging().setBackgroundMessageHandler(async remoteMessage => {
-      console.log('Background notification:', remoteMessage);
-    });
-
-    // Handle notification when app is in background
-    const unsubscribeBackground = messaging().onNotificationOpenedApp(remoteMessage => {
-      console.log('Notification opened app from background:', remoteMessage);
+      console.log("📨 New message:", remoteMessage);
     });
 
     return () => {
+      unsubscribeTokenRefresh();
       unsubscribeForeground();
-      if (unsubscribeBackground) {
-        unsubscribeBackground();
-      }
     };
   }, []);
+
+  // Update token on server when refreshed
+  const updateTokenOnServer = async (token, role, authToken) => {
+    try {
+      const endpoint = role === "user" 
+        ? "https://tambolatime.co.in/public/api/user/update-fcm-token"
+        : "https://tambolatime.co.in/public/api/host/update-fcm-token";
+      
+      await axios.post(endpoint, 
+        { fcm_token: token },
+        { headers: { Authorization: `Bearer ${authToken}` } }
+      );
+      
+      console.log("✅ Token updated on server for role:", role);
+    } catch (error) {
+      console.log("❌ Failed to update token on server:", error.message);
+    }
+  };
 
   const handleLogin = async () => {
     if (!mobile || !password) {
@@ -197,67 +187,57 @@ const Login = ({ navigation, onLoginSuccess }) => {
     ]).start();
 
     try {
-      let loginUrl = "";
-      let tokenKey = "";
-      let userKey = "";
+      // Use existing FCM token (don't generate new one)
+      const tokenToSend = fcmToken || "";
 
-      if (selectedRole === "user") {
-        loginUrl = "https://tambolatime.co.in/public/api/user/login";
-        tokenKey = "userToken";
-        userKey = "user";
-      } else {
-        loginUrl = "https://tambolatime.co.in/public/api/host/login";
-        tokenKey = "hostToken";
-        userKey = "host";
-      }
+      const endpoint = selectedRole === "user"
+        ? "https://tambolatime.co.in/public/api/user/login"
+        : "https://tambolatime.co.in/public/api/host/login";
 
-      // Prepare request body with FCM token
-      const requestBody = {
+      console.log("🌐 Logging in with role:", selectedRole);
+      console.log("📱 Using FCM token:", tokenToSend ? tokenToSend.substring(0, 20) + "..." : "none");
+
+      const response = await axios.post(endpoint, {
         mobile,
         password,
-        fcm_token: fcmToken || ""
-      };
+        fcm_token: tokenToSend
+      });
 
-      const res = await axios.post(loginUrl, requestBody);
-      const token = res.data.token;
-      const userData = res.data.user || res.data.host || res.data.data || {};
+      console.log("✅ Login successful");
 
-      if (!token) {
-        throw new Error("Invalid credentials");
-      }
+      const { token, user, host } = response.data;
+      const userData = user || host;
 
       // Clear previous storage
-      await AsyncStorage.multiRemove(["userToken", "hostToken", "user", "host", "token", "userData", "userRole"]);
+      await AsyncStorage.multiRemove([
+        "userToken", "hostToken", "user", "host", 
+        "token", "userData", "userRole"
+      ]);
 
-      // Store data
+      // Store new data
       await AsyncStorage.setItem("userRole", selectedRole);
-      await AsyncStorage.setItem(tokenKey, token);
-      await AsyncStorage.setItem(userKey, JSON.stringify(userData));
-      await AsyncStorage.setItem("userData", JSON.stringify({ ...userData, role: selectedRole }));
       await AsyncStorage.setItem("token", token);
+      await AsyncStorage.setItem("userData", JSON.stringify({ ...userData, role: selectedRole }));
       
-      // Also store FCM token locally for reference
-      if (fcmToken) {
-        await AsyncStorage.setItem("fcmToken", fcmToken);
+      if (selectedRole === "user") {
+        await AsyncStorage.setItem("userToken", token);
+        await AsyncStorage.setItem("user", JSON.stringify(userData));
+      } else {
+        await AsyncStorage.setItem("hostToken", token);
+        await AsyncStorage.setItem("host", JSON.stringify(userData));
       }
 
-      // Success animation
-      setTimeout(() => {
-        onLoginSuccess();
-      }, 400);
+      // Keep device token
+      if (fcmToken) {
+        await AsyncStorage.setItem("deviceFcmToken", fcmToken);
+      }
+
+      // Navigate to home
+      setTimeout(() => onLoginSuccess(), 400);
 
     } catch (error) {
-      console.log("Login error:", error.response?.data || error.message);
+      console.log("❌ Login error:", error.response?.data || error.message);
       
-      // Error shake animation
-      const shake = new Animated.Value(0);
-      Animated.sequence([
-        Animated.timing(shake, { toValue: 8, duration: 60, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: -8, duration: 60, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: 8, duration: 60, useNativeDriver: true }),
-        Animated.timing(shake, { toValue: 0, duration: 60, useNativeDriver: true }),
-      ]).start();
-
       Alert.alert(
         "Login Failed",
         error.response?.data?.message || "Invalid mobile number or password"
@@ -267,22 +247,18 @@ const Login = ({ navigation, onLoginSuccess }) => {
     }
   };
 
-  // Function to manually request notification permission (optional UI button)
-  const handleRequestNotificationPermission = async () => {
-    try {
-      await requestNotificationPermission();
-      Alert.alert(
-        "Success",
-        "Notification permission requested. You can now receive game updates and notifications.",
-        [{ text: "OK" }]
-      );
-    } catch (error) {
-      Alert.alert(
-        "Error",
-        "Failed to request notification permission. Please check app settings.",
-        [{ text: "OK" }]
-      );
-    }
+  // Debug function to check token status
+  const debugTokens = async () => {
+    const deviceToken = await AsyncStorage.getItem("deviceFcmToken");
+    const currentRole = await AsyncStorage.getItem("userRole");
+    
+    Alert.alert(
+      "Token Info",
+      `Device Token: ${deviceToken ? "✅" : "❌"}\n` +
+      `Token Length: ${deviceToken?.length || 0}\n` +
+      `Current Role: ${currentRole || "none"}\n` +
+      `First 20 chars: ${deviceToken?.substring(0, 20) || "none"}...`
+    );
   };
 
   return (
@@ -293,12 +269,10 @@ const Login = ({ navigation, onLoginSuccess }) => {
           <KeyboardAvoidingView
             style={{ flex: 1 }}
             behavior={Platform.OS === "ios" ? "padding" : "height"}
-            keyboardVerticalOffset={Platform.OS === "ios" ? 20 : 0}
           >
             <ScrollView
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
             >
               <Animated.View
                 style={[
@@ -309,31 +283,28 @@ const Login = ({ navigation, onLoginSuccess }) => {
                   }
                 ]}
               >
-                {/* Simple Welcome Header */}
                 <View style={styles.header}>
                   <View style={styles.logoContainer}>
                     <Text style={styles.appName}>Tambola Timez</Text>
                     <Text style={styles.welcomeText}>Welcome Back!</Text>
                   </View>
                   
-                  {/* Optional: Show FCM token status */}
-                  {fcmToken ? (
-                    <View style={styles.fcmStatusContainer}>
-                      <Ionicons name="notifications" size={16} color={ACCENT_COLOR} />
-                      <Text style={styles.fcmStatusText}>Notifications Enabled</Text>
-                    </View>
-                  ) : (
-                    <TouchableOpacity 
-                      style={styles.enableNotificationsButton}
-                      onPress={handleRequestNotificationPermission}
-                    >
-                      <Ionicons name="notifications-off" size={16} color={ACCENT_COLOR} />
-                      <Text style={styles.enableNotificationsText}>Enable Notifications</Text>
-                    </TouchableOpacity>
-                  )}
+                  {/* Token status indicator */}
+                  <TouchableOpacity 
+                    style={styles.fcmStatusContainer}
+                    onPress={debugTokens}
+                  >
+                    <Ionicons 
+                      name={fcmToken ? "notifications" : "notifications-off"} 
+                      size={16} 
+                      color={ACCENT_COLOR} 
+                    />
+                    <Text style={styles.fcmStatusText}>
+                      {fcmToken ? "Notifications Ready" : "Tap to Enable"}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
 
-                {/* Login Card */}
                 <View style={styles.card}>
                   {/* Role Selection */}
                   <View style={styles.roleContainer}>
@@ -343,16 +314,12 @@ const Login = ({ navigation, onLoginSuccess }) => {
                         selectedRole === "user" && styles.roleButtonActive,
                       ]}
                       onPress={() => setSelectedRole("user")}
-                      activeOpacity={0.8}
                     >
-                      <View style={[
-                        styles.roleButtonContent,
-                        selectedRole === "user" && styles.roleButtonContentActive
-                      ]}>
+                      <View style={styles.roleButtonContent}>
                         <Ionicons 
                           name="person" 
                           size={20} 
-                          color={selectedRole === "user" ? DARK_TEAL : LIGHT_ACCENT} 
+                          color={selectedRole === "user" ? WHITE : TEXT_LIGHT} 
                         />
                         <Text style={[
                           styles.roleButtonText,
@@ -369,16 +336,12 @@ const Login = ({ navigation, onLoginSuccess }) => {
                         selectedRole === "host" && styles.roleButtonActive,
                       ]}
                       onPress={() => setSelectedRole("host")}
-                      activeOpacity={0.8}
                     >
-                      <View style={[
-                        styles.roleButtonContent,
-                        selectedRole === "host" && styles.roleButtonContentActive
-                      ]}>
+                      <View style={styles.roleButtonContent}>
                         <Ionicons 
                           name="mic" 
                           size={20} 
-                          color={selectedRole === "host" ? DARK_TEAL : LIGHT_ACCENT} 
+                          color={selectedRole === "host" ? WHITE : TEXT_LIGHT} 
                         />
                         <Text style={[
                           styles.roleButtonText,
@@ -396,7 +359,7 @@ const Login = ({ navigation, onLoginSuccess }) => {
                       <Ionicons name="call-outline" size={20} color={ACCENT_COLOR} style={styles.inputIcon} />
                       <TextInput
                         placeholder="Mobile Number"
-                        placeholderTextColor={MUTED_GOLD}
+                        placeholderTextColor={TEXT_LIGHT}
                         style={styles.input}
                         value={mobile}
                         onChangeText={setMobile}
@@ -409,7 +372,7 @@ const Login = ({ navigation, onLoginSuccess }) => {
                       <Ionicons name="lock-closed-outline" size={20} color={ACCENT_COLOR} style={styles.inputIcon} />
                       <TextInput
                         placeholder="Password"
-                        placeholderTextColor={MUTED_GOLD}
+                        placeholderTextColor={TEXT_LIGHT}
                         style={styles.input}
                         value={password}
                         onChangeText={setPassword}
@@ -436,14 +399,13 @@ const Login = ({ navigation, onLoginSuccess }) => {
                         ]}
                         onPress={handleLogin}
                         disabled={isLoading}
-                        activeOpacity={0.9}
                       >
                         {isLoading ? (
-                          <Ionicons name="reload-circle" size={24} color={DARK_TEAL} style={styles.loadingIcon} />
+                          <Ionicons name="reload-circle" size={24} color={WHITE} />
                         ) : (
                           <>
                             <Text style={styles.loginButtonText}>SIGN IN</Text>
-                            <Ionicons name="arrow-forward" size={20} color={DARK_TEAL} />
+                            <Ionicons name="arrow-forward" size={20} color={WHITE} />
                           </>
                         )}
                       </TouchableOpacity>
@@ -454,7 +416,6 @@ const Login = ({ navigation, onLoginSuccess }) => {
                   <View style={styles.linksRow}>
                     <TouchableOpacity
                       onPress={() => navigation.navigate("ForgotPassword", { role: selectedRole })}
-                      style={styles.linkButton}
                     >
                       <Text style={styles.linkText}>Forgot Password?</Text>
                     </TouchableOpacity>
@@ -463,20 +424,15 @@ const Login = ({ navigation, onLoginSuccess }) => {
 
                     <TouchableOpacity 
                       onPress={() => navigation.navigate("ChooseRole")}
-                      style={styles.linkButton}
                     >
                       <Text style={styles.linkText}>Create Account</Text>
                     </TouchableOpacity>
                   </View>
                 </View>
 
-                {/* Bottom Quick Info */}
                 <View style={styles.bottomInfo}>
                   <Text style={styles.infoText}>
                     By signing in, you agree to our Terms & Privacy
-                  </Text>
-                  <Text style={styles.infoText}>
-                    Enable notifications for game updates and alerts
                   </Text>
                   <Text style={styles.versionText}>Tambola Timez v1.0</Text>
                 </View>
@@ -489,24 +445,15 @@ const Login = ({ navigation, onLoginSuccess }) => {
   );
 };
 
-export default Login;
-
+// Keep your existing styles
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: PRIMARY_COLOR,
+    backgroundColor: BACKGROUND_COLOR,
   },
   container: {
     flex: 1,
-    backgroundColor: PRIMARY_COLOR,
-  },
-  backgroundGradient: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: SCREEN_HEIGHT * 0.3,
-    backgroundColor: 'rgba(0, 95, 106, 0.2)',
+    backgroundColor: BACKGROUND_COLOR,
   },
   scrollContent: {
     flexGrow: 1,
@@ -529,72 +476,54 @@ const styles = StyleSheet.create({
   appName: {
     fontSize: 34,
     fontWeight: '800',
-    color: LIGHT_ACCENT,
+    color: PRIMARY_COLOR,
     marginBottom: 8,
-    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowColor: 'rgba(79, 172, 254, 0.3)',
     textShadowOffset: { width: 1, height: 1 },
     textShadowRadius: 2,
   },
   welcomeText: {
     fontSize: 18,
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     fontWeight: '500',
-    opacity: 0.9,
   },
   fcmStatusContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
+    backgroundColor: 'rgba(79, 172, 254, 0.1)',
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 20,
     marginTop: 5,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
+    borderColor: PRIMARY_COLOR,
   },
   fcmStatusText: {
     fontSize: 12,
-    color: ACCENT_COLOR,
-    fontWeight: '600',
-    marginLeft: 6,
-  },
-  enableNotificationsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(212, 175, 55, 0.1)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    marginTop: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
-  },
-  enableNotificationsText: {
-    fontSize: 12,
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
     fontWeight: '600',
     marginLeft: 6,
   },
   card: {
-    backgroundColor: SECONDARY_COLOR,
+    backgroundColor: WHITE,
     borderRadius: 25,
     padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 20,
-    elevation: 10,
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
   },
   roleContainer: {
     flexDirection: 'row',
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 15,
     padding: 6,
     marginBottom: 24,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
+    borderColor: BORDER_COLOR,
   },
   roleButton: {
     flex: 1,
@@ -611,18 +540,15 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   roleButtonActive: {
-    backgroundColor: 'rgba(212, 175, 55, 0.2)',
-  },
-  roleButtonContentActive: {
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
   },
   roleButtonText: {
     fontSize: 15,
     fontWeight: '600',
-    color: LIGHT_ACCENT,
+    color: TEXT_LIGHT,
   },
   roleButtonTextActive: {
-    color: DARK_TEAL,
+    color: WHITE,
     fontWeight: '700',
   },
   form: {
@@ -632,10 +558,10 @@ const styles = StyleSheet.create({
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: DARK_TEAL,
+    backgroundColor: BACKGROUND_COLOR,
     borderRadius: 15,
-    borderWidth: 2,
-    borderColor: ACCENT_COLOR,
+    borderWidth: 1,
+    borderColor: BORDER_COLOR,
     paddingHorizontal: 16,
     height: 56,
   },
@@ -645,7 +571,7 @@ const styles = StyleSheet.create({
   input: {
     flex: 1,
     fontSize: 16,
-    color: LIGHT_ACCENT,
+    color: TEXT_DARK,
     height: '100%',
     fontWeight: '500',
   },
@@ -653,29 +579,26 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   loginButton: {
-    backgroundColor: ACCENT_COLOR,
+    backgroundColor: PRIMARY_COLOR,
     borderRadius: 15,
     height: 56,
     justifyContent: 'center',
     alignItems: 'center',
     flexDirection: 'row',
     gap: 10,
-    shadowColor: ACCENT_COLOR,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
     borderWidth: 1,
-    borderColor: 'rgba(212, 175, 55, 0.3)',
+    borderColor: 'rgba(255, 255, 255, 0.3)',
   },
   loginButtonDisabled: {
     opacity: 0.7,
   },
-  loadingIcon: {
-    transform: [{ rotate: '0deg' }],
-  },
   loginButtonText: {
-    color: DARK_TEAL,
+    color: WHITE,
     fontSize: 16,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -686,18 +609,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 20,
   },
-  linkButton: {
-    paddingVertical: 8,
-  },
   linkText: {
-    color: ACCENT_COLOR,
+    color: PRIMARY_COLOR,
     fontSize: 14,
     fontWeight: '600',
   },
   separator: {
     width: 1,
     height: 16,
-    backgroundColor: 'rgba(212, 175, 55, 0.5)',
+    backgroundColor: BORDER_COLOR,
   },
   bottomInfo: {
     marginTop: 30,
@@ -705,16 +625,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   infoText: {
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     fontSize: 12,
     textAlign: 'center',
     lineHeight: 18,
     marginBottom: 8,
-    opacity: 0.8,
   },
   versionText: {
-    color: MUTED_GOLD,
+    color: TEXT_LIGHT,
     fontSize: 11,
     opacity: 0.6,
   },
 });
+
+export default Login;
