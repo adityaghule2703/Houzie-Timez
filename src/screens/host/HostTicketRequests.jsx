@@ -397,6 +397,8 @@ const HostTicketRequests = ({ navigation, route }) => {
         return "#4CAF50";
       case "pending":
         return "#FF9800";
+      case "not_required":
+        return "#9E9E9E";
       default:
         return "#9E9E9E";
     }
@@ -408,6 +410,8 @@ const HostTicketRequests = ({ navigation, route }) => {
         return "checkmark-circle";
       case "pending":
         return "cash-outline";
+      case "not_required":
+        return "heart-outline";
       default:
         return "help-circle-outline";
     }
@@ -450,7 +454,38 @@ const HostTicketRequests = ({ navigation, route }) => {
     }
   };
 
+  // Helper function to check if payment is not required or already paid
+  const canApprove = (request) => {
+    return request.payment_status === "paid" || 
+           request.payment_status === "not_required" ||
+           request.total_amount === 0;
+  };
+
   const renderPaymentStatus = (request) => {
+    // Don't show payment status for free games with not_required status
+    if (request.payment_status === "not_required" || request.total_amount === 0) {
+      return (
+        <View style={styles.paymentStatusContainer}>
+          <View style={[
+            styles.paymentStatusBadge,
+            { backgroundColor: "#9E9E9E15" }
+          ]}>
+            <Ionicons 
+              name="heart-outline" 
+              size={12} 
+              color="#9E9E9E" 
+            />
+            <Text style={[
+              styles.paymentStatusText,
+              { color: "#9E9E9E" }
+            ]}>
+              FREE GAME
+            </Text>
+          </View>
+        </View>
+      );
+    }
+
     if (request.status !== "pending") return null;
 
     return (
@@ -492,449 +527,461 @@ const HostTicketRequests = ({ navigation, route }) => {
     );
   };
 
-  const renderRequestCard = (request) => (
-    <TouchableOpacity
-      key={request.id}
-      style={[
-        styles.requestCard,
-        bulkSelectMode && { paddingLeft: 60 },
-        selectedRequests.includes(request.id) && styles.selectedCard,
-      ]}
-      onPress={() => {
-        if (bulkSelectMode && request.status === "pending") {
-          toggleRequestSelection(request.id);
-        } else {
-          setSelectedRequest(request);
-          setModalVisible(true);
-        }
-      }}
-      activeOpacity={0.9}
-    >
-      {bulkSelectMode && request.status === "pending" && (
-        <View style={styles.checkboxContainer}>
-          <View style={[
-            styles.checkbox,
-            selectedRequests.includes(request.id) && styles.checkboxSelected
-          ]}>
-            {selectedRequests.includes(request.id) && (
-              <Ionicons name="checkmark" size={16} color="#FFF" />
+  const renderRequestCard = (request) => {
+    return (
+      <TouchableOpacity
+        key={request.id}
+        style={[
+          styles.requestCard,
+          bulkSelectMode && { paddingLeft: 60 },
+          selectedRequests.includes(request.id) && styles.selectedCard,
+        ]}
+        onPress={() => {
+          if (bulkSelectMode && request.status === "pending") {
+            toggleRequestSelection(request.id);
+          } else {
+            setSelectedRequest(request);
+            setModalVisible(true);
+          }
+        }}
+        activeOpacity={0.9}
+      >
+        {bulkSelectMode && request.status === "pending" && (
+          <View style={styles.checkboxContainer}>
+            <View style={[
+              styles.checkbox,
+              selectedRequests.includes(request.id) && styles.checkboxSelected
+            ]}>
+              {selectedRequests.includes(request.id) && (
+                <Ionicons name="checkmark" size={16} color="#FFF" />
+              )}
+            </View>
+          </View>
+        )}
+        
+        <View style={styles.cardHeader}>
+          <View style={styles.userInfo}>
+            {request.user?.profile_image ? (
+              <Image 
+                source={{ uri: request.user.profile_image }} 
+                style={styles.userAvatar}
+              />
+            ) : (
+              <View style={styles.avatarPlaceholder}>
+                <Text style={styles.avatarText}>
+                  {request.user?.name?.charAt(0) || "U"}
+                </Text>
+              </View>
             )}
+            <View style={styles.userDetails}>
+              <Text style={styles.userName} numberOfLines={1}>
+                {request.user?.name || "Unknown User"}
+              </Text>
+              <Text style={styles.userPhone}>{request.user?.mobile || "No phone"}</Text>
+            </View>
+          </View>
+          
+          <View style={[styles.statusBadge, { backgroundColor: getStatusColor(request.status) + "15" }]}>
+            <Ionicons 
+              name={getStatusIcon(request.status)} 
+              size={14} 
+              color={getStatusColor(request.status)} 
+            />
+            <Text style={[styles.statusText, { color: getStatusColor(request.status) }]}>
+              {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
+            </Text>
           </View>
         </View>
-      )}
-      
-      <View style={styles.cardHeader}>
-        <View style={styles.userInfo}>
-          {request.user?.profile_image ? (
-            <Image 
-              source={{ uri: request.user.profile_image }} 
-              style={styles.userAvatar}
-            />
-          ) : (
-            <View style={styles.avatarPlaceholder}>
-              <Text style={styles.avatarText}>
-                {request.user?.name?.charAt(0) || "U"}
+
+        <View style={styles.cardDetails}>
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <Ionicons name="ticket-outline" size={16} color="#666" />
+              <Text style={styles.detailText}>{request.ticket_quantity} tickets</Text>
+            </View>
+            
+            <View style={styles.detailItem}>
+              <Ionicons name="cash-outline" size={16} color="#666" />
+              <Text style={styles.detailText}>
+                {request.total_amount === 0 ? "Free" : `₹${request.total_amount}`}
               </Text>
             </View>
-          )}
-          <View style={styles.userDetails}>
-            <Text style={styles.userName} numberOfLines={1}>
-              {request.user?.name || "Unknown User"}
-            </Text>
-            <Text style={styles.userPhone}>{request.user?.mobile || "No phone"}</Text>
           </View>
-        </View>
-        
-        <View style={[styles.statusBadge, { backgroundColor: getStatusColor(request.status) + "15" }]}>
-          <Ionicons 
-            name={getStatusIcon(request.status)} 
-            size={14} 
-            color={getStatusColor(request.status)} 
-          />
-          <Text style={[styles.statusText, { color: getStatusColor(request.status) }]}>
-            {request.status.charAt(0).toUpperCase() + request.status.slice(1)}
-          </Text>
-        </View>
-      </View>
 
-      <View style={styles.cardDetails}>
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Ionicons name="ticket-outline" size={16} color="#666" />
-            <Text style={styles.detailText}>{request.ticket_quantity} tickets</Text>
+          <View style={styles.detailRow}>
+            <View style={styles.detailItem}>
+              <Ionicons name="calendar-outline" size={16} color="#666" />
+              <Text style={styles.detailText}>{formatDate(request.requested_at)}</Text>
+            </View>
+            
+            <View style={styles.detailItem}>
+              <Ionicons name="time-outline" size={16} color="#666" />
+              <Text style={styles.detailText}>{formatTime(request.requested_at)}</Text>
+            </View>
           </View>
-          
-          <View style={styles.detailItem}>
-            <Ionicons name="cash-outline" size={16} color="#666" />
-            <Text style={styles.detailText}>₹{request.total_amount}</Text>
-          </View>
+
+          {renderPaymentStatus(request)}
         </View>
 
-        <View style={styles.detailRow}>
-          <View style={styles.detailItem}>
-            <Ionicons name="calendar-outline" size={16} color="#666" />
-            <Text style={styles.detailText}>{formatDate(request.requested_at)}</Text>
-          </View>
-          
-          <View style={styles.detailItem}>
-            <Ionicons name="time-outline" size={16} color="#666" />
-            <Text style={styles.detailText}>{formatTime(request.requested_at)}</Text>
-          </View>
-        </View>
-
-        {renderPaymentStatus(request)}
-      </View>
-
-      {!bulkSelectMode && request.status === "pending" && (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={[styles.actionButton, styles.rejectButton]}
-            onPress={() => {
-              Alert.alert(
-                "Reject Request",
-                `Are you sure you want to reject ${request.user?.name}'s request for ${request.ticket_quantity} ticket(s)?`,
-                [
-                  { text: "Cancel", style: "cancel" },
-                  { 
-                    text: "Reject", 
-                    style: "destructive",
-                    onPress: () => handleRejectRequest(request.id)
-                  }
-                ]
-              );
-            }}
-            disabled={loadingActions[`reject_${request.id}`]}
-          >
-            {loadingActions[`reject_${request.id}`] ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="close" size={16} color="#FFF" />
-                <Text style={styles.actionButtonText}>Reject</Text>
-              </>
-            )}
-          </TouchableOpacity>
-          
-          <TouchableOpacity
-            style={[
-              styles.actionButton, 
-              styles.approveButton,
-              request.payment_status !== "paid" && styles.disabledActionButton
-            ]}
-            onPress={() => {
-              if (request.payment_status === "paid") {
+        {!bulkSelectMode && request.status === "pending" && (
+          <View style={styles.actionButtons}>
+            <TouchableOpacity
+              style={[styles.actionButton, styles.rejectButton]}
+              onPress={() => {
                 Alert.alert(
-                  "Approve Request",
-                  `Are you sure you want to approve ${request.user?.name}'s request for ${request.ticket_quantity} ticket(s)?`,
+                  "Reject Request",
+                  `Are you sure you want to reject ${request.user?.name}'s request for ${request.ticket_quantity} ticket(s)?`,
                   [
                     { text: "Cancel", style: "cancel" },
                     { 
-                      text: "Approve", 
-                      onPress: () => handleApproveRequest(request.id)
+                      text: "Reject", 
+                      style: "destructive",
+                      onPress: () => handleRejectRequest(request.id)
                     }
                   ]
                 );
-              } else {
-                Alert.alert(
-                  "Payment Required",
-                  "Please mark payment as paid before approving the request.",
-                  [
-                    { text: "Cancel", style: "cancel" },
-                    { 
-                      text: "Mark as Paid", 
-                      onPress: () => markAsPaid(request.id)
-                    }
-                  ]
-                );
-              }
-            }}
-            disabled={loadingActions[`approve_${request.id}`] || request.payment_status !== "paid"}
-          >
-            {loadingActions[`approve_${request.id}`] ? (
-              <ActivityIndicator size="small" color="#FFF" />
-            ) : (
-              <>
-                <Ionicons name="checkmark" size={16} color="#FFF" />
-                <Text style={styles.actionButtonText}>Approve</Text>
-              </>
-            )}
-          </TouchableOpacity>
-        </View>
-      )}
-    </TouchableOpacity>
-  );
+              }}
+              disabled={loadingActions[`reject_${request.id}`]}
+            >
+              {loadingActions[`reject_${request.id}`] ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="close" size={16} color="#FFF" />
+                  <Text style={styles.actionButtonText}>Reject</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={[
+                styles.actionButton, 
+                styles.approveButton,
+                !canApprove(request) && styles.disabledActionButton
+              ]}
+              onPress={() => {
+                if (canApprove(request)) {
+                  Alert.alert(
+                    "Approve Request",
+                    `Are you sure you want to approve ${request.user?.name}'s request for ${request.ticket_quantity} ticket(s)?`,
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { 
+                        text: "Approve", 
+                        onPress: () => handleApproveRequest(request.id)
+                      }
+                    ]
+                  );
+                } else {
+                  Alert.alert(
+                    "Payment Required",
+                    "Please mark payment as paid before approving the request.",
+                    [
+                      { text: "Cancel", style: "cancel" },
+                      { 
+                        text: "Mark as Paid", 
+                        onPress: () => markAsPaid(request.id)
+                      }
+                    ]
+                  );
+                }
+              }}
+              disabled={loadingActions[`approve_${request.id}`] || !canApprove(request)}
+            >
+              {loadingActions[`approve_${request.id}`] ? (
+                <ActivityIndicator size="small" color="#FFF" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark" size={16} color="#FFF" />
+                  <Text style={styles.actionButtonText}>Approve</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+      </TouchableOpacity>
+    );
+  };
 
-  const RequestDetailModal = () => (
-    <Modal
-      visible={modalVisible}
-      transparent={true}
-      animationType="fade"
-      onRequestClose={() => setModalVisible(false)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalContent}>
-            {selectedRequest && (
-              <>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>Ticket Request Details</Text>
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={() => setModalVisible(false)}
+  const RequestDetailModal = () => {
+    return (
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="fade"
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              {selectedRequest && (
+                <>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>Ticket Request Details</Text>
+                    <TouchableOpacity
+                      style={styles.closeButton}
+                      onPress={() => setModalVisible(false)}
+                    >
+                      <Ionicons name="close" size={24} color="#666" />
+                    </TouchableOpacity>
+                  </View>
+
+                  <ScrollView
+                    style={styles.modalBody}
+                    showsVerticalScrollIndicator={false}
+                    contentContainerStyle={styles.modalScrollContent}
                   >
-                    <Ionicons name="close" size={24} color="#666" />
-                  </TouchableOpacity>
-                </View>
+                    <View style={styles.userInfoModal}>
+                      {selectedRequest.user?.profile_image ? (
+                        <Image 
+                          source={{ uri: selectedRequest.user.profile_image }} 
+                          style={styles.userAvatarModal}
+                        />
+                      ) : (
+                        <View style={styles.avatarPlaceholderModal}>
+                          <Text style={styles.avatarTextModal}>
+                            {selectedRequest.user?.name?.charAt(0) || "U"}
+                          </Text>
+                        </View>
+                      )}
+                      <View style={styles.userDetailsModal}>
+                        <Text style={styles.userNameModal}>{selectedRequest.user?.name || "Unknown User"}</Text>
+                        <Text style={styles.userPhoneModal}>{selectedRequest.user?.mobile || "No phone"}</Text>
+                        <Text style={styles.userUsernameModal}>@{selectedRequest.user?.username || "No username"}</Text>
+                      </View>
+                    </View>
 
-                <ScrollView
-                  style={styles.modalBody}
-                  showsVerticalScrollIndicator={false}
-                  contentContainerStyle={styles.modalScrollContent}
-                >
-                  <View style={styles.userInfoModal}>
-                    {selectedRequest.user?.profile_image ? (
-                      <Image 
-                        source={{ uri: selectedRequest.user.profile_image }} 
-                        style={styles.userAvatarModal}
-                      />
-                    ) : (
-                      <View style={styles.avatarPlaceholderModal}>
-                        <Text style={styles.avatarTextModal}>
-                          {selectedRequest.user?.name?.charAt(0) || "U"}
+                    <View style={styles.statusRow}>
+                      <View style={[styles.statusBadgeModal, { backgroundColor: getStatusColor(selectedRequest.status) + "15" }]}>
+                        <Ionicons 
+                          name={getStatusIcon(selectedRequest.status)} 
+                          size={18} 
+                          color={getStatusColor(selectedRequest.status)} 
+                        />
+                        <Text style={[styles.statusTextModal, { color: getStatusColor(selectedRequest.status) }]}>
+                          {selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
                         </Text>
                       </View>
-                    )}
-                    <View style={styles.userDetailsModal}>
-                      <Text style={styles.userNameModal}>{selectedRequest.user?.name || "Unknown User"}</Text>
-                      <Text style={styles.userPhoneModal}>{selectedRequest.user?.mobile || "No phone"}</Text>
-                      <Text style={styles.userUsernameModal}>@{selectedRequest.user?.username || "No username"}</Text>
-                    </View>
-                  </View>
 
-                  <View style={styles.statusRow}>
-                    <View style={[styles.statusBadgeModal, { backgroundColor: getStatusColor(selectedRequest.status) + "15" }]}>
-                      <Ionicons 
-                        name={getStatusIcon(selectedRequest.status)} 
-                        size={18} 
-                        color={getStatusColor(selectedRequest.status)} 
-                      />
-                      <Text style={[styles.statusTextModal, { color: getStatusColor(selectedRequest.status) }]}>
-                        {selectedRequest.status.charAt(0).toUpperCase() + selectedRequest.status.slice(1)}
-                      </Text>
+                      {selectedRequest.payment_status !== "not_required" && (
+                        <View style={[styles.paymentStatusBadgeModal, { backgroundColor: getPaymentStatusColor(selectedRequest.payment_status) + "15" }]}>
+                          <Ionicons 
+                            name={getPaymentStatusIcon(selectedRequest.payment_status)} 
+                            size={14} 
+                            color={getPaymentStatusColor(selectedRequest.payment_status)} 
+                          />
+                          <Text style={[
+                            styles.paymentStatusTextModal,
+                            { color: getPaymentStatusColor(selectedRequest.payment_status) }
+                          ]}>
+                            Payment: {selectedRequest.payment_status?.toUpperCase() || "PENDING"}
+                          </Text>
+                        </View>
+                      )}
                     </View>
 
-                    <View style={[styles.paymentStatusBadgeModal, { backgroundColor: getPaymentStatusColor(selectedRequest.payment_status) + "15" }]}>
-                      <Ionicons 
-                        name={getPaymentStatusIcon(selectedRequest.payment_status)} 
-                        size={14} 
-                        color={getPaymentStatusColor(selectedRequest.payment_status)} 
-                      />
-                      <Text style={[
-                        styles.paymentStatusTextModal,
-                        { color: getPaymentStatusColor(selectedRequest.payment_status) }
-                      ]}>
-                        Payment: {selectedRequest.payment_status?.toUpperCase() || "PENDING"}
-                      </Text>
-                    </View>
-                  </View>
+                    <View style={styles.infoGrid}>
+                      <View style={styles.infoCard}>
+                        <Ionicons name="ticket-outline" size={20} color="#FF7675" />
+                        <Text style={styles.infoCardLabel}>Tickets</Text>
+                        <Text style={styles.infoCardValue}>{selectedRequest.ticket_quantity}</Text>
+                      </View>
 
-                  <View style={styles.infoGrid}>
-                    <View style={styles.infoCard}>
-                      <Ionicons name="ticket-outline" size={20} color="#FF7675" />
-                      <Text style={styles.infoCardLabel}>Tickets</Text>
-                      <Text style={styles.infoCardValue}>{selectedRequest.ticket_quantity}</Text>
-                    </View>
+                      <View style={styles.infoCard}>
+                        <Ionicons name="cash-outline" size={20} color="#FF7675" />
+                        <Text style={styles.infoCardLabel}>Amount</Text>
+                        <Text style={styles.infoCardValue}>
+                          {selectedRequest.total_amount === 0 ? "Free" : `₹${selectedRequest.total_amount}`}
+                        </Text>
+                      </View>
 
-                    <View style={styles.infoCard}>
-                      <Ionicons name="cash-outline" size={20} color="#FF7675" />
-                      <Text style={styles.infoCardLabel}>Amount</Text>
-                      <Text style={styles.infoCardValue}>₹{selectedRequest.total_amount}</Text>
-                    </View>
+                      {selectedRequest.payment_status !== "not_required" && (
+                        <View style={styles.infoCard}>
+                          <Ionicons name="card-outline" size={20} color="#FF7675" />
+                          <Text style={styles.infoCardLabel}>Payment Status</Text>
+                          <Text style={styles.infoCardValue}>
+                            {selectedRequest.payment_status?.charAt(0).toUpperCase() + selectedRequest.payment_status?.slice(1) || "N/A"}
+                          </Text>
+                        </View>
+                      )}
 
-                    <View style={styles.infoCard}>
-                      <Ionicons name="card-outline" size={20} color="#FF7675" />
-                      <Text style={styles.infoCardLabel}>Payment Status</Text>
-                      <Text style={styles.infoCardValue}>
-                        {selectedRequest.payment_status?.charAt(0).toUpperCase() + selectedRequest.payment_status?.slice(1) || "N/A"}
-                      </Text>
-                    </View>
-
-                    <View style={styles.infoCard}>
-                      <Ionicons name="game-controller-outline" size={20} color="#FF7675" />
-                      <Text style={styles.infoCardLabel}>Game</Text>
-                      <Text style={styles.infoCardValue} numberOfLines={1}>
-                        {selectedRequest.game?.game_name || "Unknown Game"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.detailsSection}>
-                    <View style={styles.detailRowModal}>
-                      <Ionicons name="calendar-outline" size={18} color="#666" />
-                      <View style={styles.detailContent}>
-                        <Text style={styles.detailLabel}>Requested Date</Text>
-                        <Text style={styles.detailValue}>
-                          {formatDate(selectedRequest.requested_at)} at {formatTime(selectedRequest.requested_at)}
+                      <View style={styles.infoCard}>
+                        <Ionicons name="game-controller-outline" size={20} color="#FF7675" />
+                        <Text style={styles.infoCardLabel}>Game</Text>
+                        <Text style={styles.infoCardValue} numberOfLines={1}>
+                          {selectedRequest.game?.game_name || "Unknown Game"}
                         </Text>
                       </View>
                     </View>
 
-                    {selectedRequest.approved_at && (
+                    <View style={styles.detailsSection}>
                       <View style={styles.detailRowModal}>
-                        <Ionicons name="checkmark-circle-outline" size={18} color="#4CAF50" />
+                        <Ionicons name="calendar-outline" size={18} color="#666" />
                         <View style={styles.detailContent}>
-                          <Text style={styles.detailLabel}>Approved At</Text>
+                          <Text style={styles.detailLabel}>Requested Date</Text>
                           <Text style={styles.detailValue}>
-                            {formatDate(selectedRequest.approved_at)} at {formatTime(selectedRequest.approved_at)}
+                            {formatDate(selectedRequest.requested_at)} at {formatTime(selectedRequest.requested_at)}
                           </Text>
                         </View>
                       </View>
-                    )}
 
-                    {selectedRequest.rejected_at && (
-                      <View style={styles.detailRowModal}>
-                        <Ionicons name="close-circle-outline" size={18} color="#F44336" />
-                        <View style={styles.detailContent}>
-                          <Text style={styles.detailLabel}>Rejected At</Text>
-                          <Text style={styles.detailValue}>
-                            {formatDate(selectedRequest.rejected_at)} at {formatTime(selectedRequest.rejected_at)}
-                          </Text>
+                      {selectedRequest.approved_at && (
+                        <View style={styles.detailRowModal}>
+                          <Ionicons name="checkmark-circle-outline" size={18} color="#4CAF50" />
+                          <View style={styles.detailContent}>
+                            <Text style={styles.detailLabel}>Approved At</Text>
+                            <Text style={styles.detailValue}>
+                              {formatDate(selectedRequest.approved_at)} at {formatTime(selectedRequest.approved_at)}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                    )}
+                      )}
 
-                    {selectedRequest.rejection_reason && (
-                      <View style={styles.detailRowModal}>
-                        <Ionicons name="alert-circle-outline" size={18} color="#FF9800" />
-                        <View style={styles.detailContent}>
-                          <Text style={styles.detailLabel}>Rejection Reason</Text>
-                          <Text style={styles.detailValue}>{selectedRequest.rejection_reason}</Text>
+                      {selectedRequest.rejected_at && (
+                        <View style={styles.detailRowModal}>
+                          <Ionicons name="close-circle-outline" size={18} color="#F44336" />
+                          <View style={styles.detailContent}>
+                            <Text style={styles.detailLabel}>Rejected At</Text>
+                            <Text style={styles.detailValue}>
+                              {formatDate(selectedRequest.rejected_at)} at {formatTime(selectedRequest.rejected_at)}
+                            </Text>
+                          </View>
                         </View>
-                      </View>
-                    )}
-                  </View>
+                      )}
 
-                  {selectedRequest.notes && (
-                    <View style={styles.notesCard}>
-                      <View style={styles.notesHeader}>
-                        <Ionicons name="document-text-outline" size={18} color="#FF7675" />
-                        <Text style={styles.notesTitle}>Notes</Text>
-                      </View>
-                      <Text style={styles.notesText}>{selectedRequest.notes}</Text>
+                      {selectedRequest.rejection_reason && (
+                        <View style={styles.detailRowModal}>
+                          <Ionicons name="alert-circle-outline" size={18} color="#FF9800" />
+                          <View style={styles.detailContent}>
+                            <Text style={styles.detailLabel}>Rejection Reason</Text>
+                            <Text style={styles.detailValue}>{selectedRequest.rejection_reason}</Text>
+                          </View>
+                        </View>
+                      )}
                     </View>
-                  )}
 
-                  <View style={styles.modalBottomSpace} />
-                </ScrollView>
+                    {selectedRequest.notes && (
+                      <View style={styles.notesCard}>
+                        <View style={styles.notesHeader}>
+                          <Ionicons name="document-text-outline" size={18} color="#FF7675" />
+                          <Text style={styles.notesTitle}>Notes</Text>
+                        </View>
+                        <Text style={styles.notesText}>{selectedRequest.notes}</Text>
+                      </View>
+                    )}
 
-                {selectedRequest.status === "pending" && (
-                  <View style={styles.modalActions}>
-                    {selectedRequest.payment_status === "pending" && (
+                    <View style={styles.modalBottomSpace} />
+                  </ScrollView>
+
+                  {selectedRequest.status === "pending" && (
+                    <View style={styles.modalActions}>
+                      {selectedRequest.payment_status === "pending" && (
+                        <TouchableOpacity
+                          style={[styles.modalActionButton, styles.markPaidButtonFull]}
+                          onPress={() => {
+                            setModalVisible(false);
+                            markAsPaid(selectedRequest.id);
+                          }}
+                          disabled={loadingActions[`paid_${selectedRequest.id}`]}
+                        >
+                          {loadingActions[`paid_${selectedRequest.id}`] ? (
+                            <ActivityIndicator size="small" color="#FFF" />
+                          ) : (
+                            <>
+                              <Ionicons name="checkmark-circle" size={18} color="#FFF" />
+                              <Text style={styles.modalActionButtonText}>Mark as Paid</Text>
+                            </>
+                          )}
+                        </TouchableOpacity>
+                      )}
+                      
                       <TouchableOpacity
-                        style={[styles.modalActionButton, styles.markPaidButtonFull]}
+                        style={[styles.modalActionButton, styles.modalRejectButton]}
                         onPress={() => {
                           setModalVisible(false);
-                          markAsPaid(selectedRequest.id);
+                          Alert.alert(
+                            "Reject Request",
+                            `Are you sure you want to reject ${selectedRequest.user?.name}'s request for ${selectedRequest.ticket_quantity} ticket(s)?`,
+                            [
+                              { text: "Cancel", style: "cancel" },
+                              { 
+                                text: "Reject", 
+                                style: "destructive",
+                                onPress: () => handleRejectRequest(selectedRequest.id)
+                              }
+                            ]
+                          );
                         }}
-                        disabled={loadingActions[`paid_${selectedRequest.id}`]}
+                        disabled={loadingActions[`reject_${selectedRequest.id}`]}
                       >
-                        {loadingActions[`paid_${selectedRequest.id}`] ? (
+                        {loadingActions[`reject_${selectedRequest.id}`] ? (
                           <ActivityIndicator size="small" color="#FFF" />
                         ) : (
                           <>
-                            <Ionicons name="checkmark-circle" size={18} color="#FFF" />
-                            <Text style={styles.modalActionButtonText}>Mark as Paid</Text>
+                            <Ionicons name="close" size={18} color="#FFF" />
+                            <Text style={styles.modalActionButtonText}>Reject</Text>
                           </>
                         )}
                       </TouchableOpacity>
-                    )}
-                    
-                    <TouchableOpacity
-                      style={[styles.modalActionButton, styles.modalRejectButton]}
-                      onPress={() => {
-                        setModalVisible(false);
-                        Alert.alert(
-                          "Reject Request",
-                          `Are you sure you want to reject ${selectedRequest.user?.name}'s request for ${selectedRequest.ticket_quantity} ticket(s)?`,
-                          [
-                            { text: "Cancel", style: "cancel" },
-                            { 
-                              text: "Reject", 
-                              style: "destructive",
-                              onPress: () => handleRejectRequest(selectedRequest.id)
-                            }
-                          ]
-                        );
-                      }}
-                      disabled={loadingActions[`reject_${selectedRequest.id}`]}
-                    >
-                      {loadingActions[`reject_${selectedRequest.id}`] ? (
-                        <ActivityIndicator size="small" color="#FFF" />
-                      ) : (
-                        <>
-                          <Ionicons name="close" size={18} color="#FFF" />
-                          <Text style={styles.modalActionButtonText}>Reject</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                    
-                    <TouchableOpacity
-                      style={[
-                        styles.modalActionButton, 
-                        styles.modalApproveButton,
-                        selectedRequest.payment_status !== "paid" && styles.disabledActionButton
-                      ]}
-                      onPress={() => {
-                        if (selectedRequest.payment_status === "paid") {
-                          setModalVisible(false);
-                          Alert.alert(
-                            "Approve Request",
-                            `Are you sure you want to approve ${selectedRequest.user?.name}'s request for ${selectedRequest.ticket_quantity} ticket(s)?`,
-                            [
-                              { text: "Cancel", style: "cancel" },
-                              { 
-                                text: "Approve", 
-                                onPress: () => handleApproveRequest(selectedRequest.id)
-                              }
-                            ]
-                          );
-                        } else {
-                          Alert.alert(
-                            "Payment Required",
-                            "Please mark payment as paid before approving the request.",
-                            [
-                              { text: "Cancel", style: "cancel" },
-                              { 
-                                text: "Mark as Paid", 
-                                onPress: () => {
-                                  setModalVisible(false);
-                                  markAsPaid(selectedRequest.id);
+                      
+                      <TouchableOpacity
+                        style={[
+                          styles.modalActionButton, 
+                          styles.modalApproveButton,
+                          !canApprove(selectedRequest) && styles.disabledActionButton
+                        ]}
+                        onPress={() => {
+                          if (canApprove(selectedRequest)) {
+                            setModalVisible(false);
+                            Alert.alert(
+                              "Approve Request",
+                              `Are you sure you want to approve ${selectedRequest.user?.name}'s request for ${selectedRequest.ticket_quantity} ticket(s)?`,
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                { 
+                                  text: "Approve", 
+                                  onPress: () => handleApproveRequest(selectedRequest.id)
                                 }
-                              }
-                            ]
-                          );
-                        }
-                      }}
-                      disabled={loadingActions[`approve_${selectedRequest.id}`] || selectedRequest.payment_status !== "paid"}
-                    >
-                      {loadingActions[`approve_${selectedRequest.id}`] ? (
-                        <ActivityIndicator size="small" color="#FFF" />
-                      ) : (
-                        <>
-                          <Ionicons name="checkmark" size={18} color="#FFF" />
-                          <Text style={styles.modalActionButtonText}>Approve</Text>
-                        </>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </>
-            )}
+                              ]
+                            );
+                          } else {
+                            Alert.alert(
+                              "Payment Required",
+                              "Please mark payment as paid before approving the request.",
+                              [
+                                { text: "Cancel", style: "cancel" },
+                                { 
+                                  text: "Mark as Paid", 
+                                  onPress: () => {
+                                    setModalVisible(false);
+                                    markAsPaid(selectedRequest.id);
+                                  }
+                                }
+                              ]
+                            );
+                          }
+                        }}
+                        disabled={loadingActions[`approve_${selectedRequest.id}`] || !canApprove(selectedRequest)}
+                      >
+                        {loadingActions[`approve_${selectedRequest.id}`] ? (
+                          <ActivityIndicator size="small" color="#FFF" />
+                        ) : (
+                          <>
+                            <Ionicons name="checkmark" size={18} color="#FFF" />
+                            <Text style={styles.modalActionButtonText}>Approve</Text>
+                          </>
+                        )}
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              )}
+            </View>
           </View>
         </View>
-      </View>
-    </Modal>
-  );
+      </Modal>
+    );
+  };
 
   if (loading) {
     return (

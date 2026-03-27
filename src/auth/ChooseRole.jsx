@@ -627,7 +627,7 @@ const ChooseRole = ({ navigation }) => {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.appName}>Tambola Timez</Text>
+            <Text style={styles.appName}>Houzie Timez</Text>
             <Text style={styles.tagline}>Choose Your Role</Text>
           </View>
 
@@ -686,7 +686,7 @@ const ChooseRole = ({ navigation }) => {
             <Text style={styles.infoText}>
               Choose Player to participate in games, or Host to create and manage your own games
             </Text>
-            <Text style={styles.versionText}>Tambola Timez v1.0</Text>
+            <Text style={styles.versionText}>Houzie Timez v1.0</Text>
           </View>
         </Animated.View>
       </View>

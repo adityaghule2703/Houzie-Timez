@@ -2331,7 +2331,7 @@ const Faqs = () => {
 
         {/* INTRO */}
         <Text style={styles.introText}>
-          We're here to help you with anything and everything on Tambola Timez. Use the search below or check our frequently asked questions.
+          We're here to help you with anything and everything on Houzie Timez. Use the search below or check our frequently asked questions.
         </Text>
 
         {/* SEARCH */}

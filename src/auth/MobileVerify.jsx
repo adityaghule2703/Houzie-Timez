@@ -774,7 +774,7 @@ const MobileVerify = ({ navigation, route }) => {
         >
           {/* Header */}
           <View style={styles.header}>
-            <Text style={styles.appName}>Tambola Timez</Text>
+            <Text style={styles.appName}>Houzie Timez</Text>
             <Text style={styles.tagline}>Mobile Verification</Text>
           </View>
 
@@ -852,7 +852,7 @@ const MobileVerify = ({ navigation, route }) => {
             <Text style={styles.bottomInfoText}>
               By continuing, you agree to our Terms & Privacy Policy
             </Text>
-            <Text style={styles.versionText}>Tambola Timez v1.0</Text>
+            <Text style={styles.versionText}>Houzie Timez v1.0</Text>
           </View>
         </Animated.View>
       </View>

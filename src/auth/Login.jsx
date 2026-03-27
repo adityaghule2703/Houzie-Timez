@@ -309,7 +309,7 @@ const Login = ({ navigation, onLoginSuccess }) => {
               >
                 <View style={styles.header}>
                   <View style={styles.logoContainer}>
-                    <Text style={styles.appName}>Tambola Timez</Text>
+                    <Text style={styles.appName}>Houzie Timez</Text>
                     <Text style={styles.welcomeText}>Welcome Back!</Text>
                   </View>
                   
@@ -458,7 +458,7 @@ const Login = ({ navigation, onLoginSuccess }) => {
                   <Text style={styles.infoText}>
                     By signing in, you agree to our Terms & Privacy
                   </Text>
-                  <Text style={styles.versionText}>Tambola Timez v1.0</Text>
+                  <Text style={styles.versionText}>Houzie Timez v1.0</Text>
                 </View>
               </Animated.View>
             </ScrollView>

@@ -239,7 +239,7 @@ export default function App() {
       // Hide custom splash after 3 seconds (reduced from 5)
       setTimeout(() => {
         setShowSplash(false);
-      }, 3000);
+      }, 5000);
     }
   };
 
