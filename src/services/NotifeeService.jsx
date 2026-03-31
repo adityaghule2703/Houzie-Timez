@@ -1,9 +1,15 @@
-import notifee, { AndroidImportance, AndroidCategory, AndroidVisibility, EventType } from '@notifee/react-native';
-import messaging from '@react-native-firebase/messaging';
+import notifee, { 
+  AndroidImportance, 
+  AndroidCategory, 
+  AndroidVisibility, 
+  EventType,
+  AndroidBadgeIconType
+} from '@notifee/react-native';
+import { Platform, Vibration } from 'react-native';
 
-// Store for recently processed notifications with timestamp
+// Store for recently processed notifications
 const processedNotifications = new Map();
-const DEDUP_TIMEOUT = 5000; // 5 seconds
+const DEDUP_TIMEOUT = 5000;
 
 class NotifeeService {
   constructor() {
@@ -15,8 +21,14 @@ class NotifeeService {
     
     try {
       console.log('🚀 Initializing Notifee...');
-      await notifee.requestPermission();
+      
+      // Request permission
+      const settings = await notifee.requestPermission();
+      console.log('📱 Permission settings:', settings);
+      
+      // Create channels
       await this.createChannels();
+      
       this.setupListeners();
       this.initialized = true;
       console.log('✅ Notifee initialized');
@@ -27,50 +39,55 @@ class NotifeeService {
 
   createChannels = async () => {
     try {
+      // Delete existing channels first to ensure clean state
+      try {
+        await notifee.deleteChannel('urgent_channel');
+      } catch (e) {}
+      
+      try {
+        await notifee.deleteChannel('ticket_channel');
+      } catch (e) {}
+
+      // Create urgent channel with minimal settings
       await notifee.createChannel({
-        id: 'ticket_channel',
-        name: 'Ticket Notifications',
+        id: 'urgent_channel',
+        name: 'Urgent Notifications',
         importance: AndroidImportance.HIGH,
         vibration: true,
         sound: 'default',
-        lights: true,
         visibility: AndroidVisibility.PUBLIC,
         bypassDnd: true,
       });
 
-      console.log('✅ Channel created');
+      console.log('✅ Channels created');
     } catch (error) {
       console.log('❌ Channel error:', error);
     }
   };
 
   setupListeners = () => {
-    notifee.onForegroundEvent(({ type }) => {
-      if (type === EventType.PRESS) console.log('📱 Notification pressed');
+    notifee.onForegroundEvent(({ type, detail }) => {
+      if (type === EventType.PRESS) {
+        console.log('📱 Notification pressed');
+        if (detail.notification?.data) {
+          this.handleNotificationPress(detail.notification.data);
+        }
+      }
     });
   };
 
-  // Generate a unique key for any notification
+  handleNotificationPress = (data) => {
+    console.log('🔔 Notification pressed:', data);
+    // Handle navigation based on notification data
+    // You can emit an event or use a global navigation ref here
+  };
+
   generateNotificationKey = (remoteMessage) => {
     const data = remoteMessage.data || {};
-    
-    // For ticket requests, use ticket ID as primary key
     if (data.ticket_request_id) {
       return `ticket_${data.ticket_request_id}`;
     }
-    
-    // For test notifications, use a combination of title and timestamp
-    const title = remoteMessage.notification?.title || data.title || '';
-    const timestamp = data.timestamp || Date.now();
-    
-    // Create a hash of the content
-    const content = `${title}_${timestamp}`;
-    let hash = 0;
-    for (let i = 0; i < content.length; i++) {
-      hash = ((hash << 5) - hash) + content.charCodeAt(i);
-      hash |= 0;
-    }
-    return `notif_${hash}`;
+    return `notif_${Date.now()}_${Math.random()}`;
   };
 
   displayNotification = async (remoteMessage) => {
@@ -78,65 +95,76 @@ class NotifeeService {
       const now = Date.now();
       const data = remoteMessage.data || {};
       
-      // Generate unique key for this notification
+      console.log('📱 Processing notification:', data);
+      
+      // Generate unique key
       const notificationKey = this.generateNotificationKey(remoteMessage);
       
-      // CLEANUP: Remove old entries
+      // Deduplication
       for (const [key, timestamp] of processedNotifications.entries()) {
         if (now - timestamp > DEDUP_TIMEOUT) {
           processedNotifications.delete(key);
         }
       }
       
-      // Check if this notification was recently shown
       if (processedNotifications.has(notificationKey)) {
-        console.log(`⏭️ Duplicate prevented: ${notificationKey.substring(0, 12)}...`);
+        console.log(`⏭️ Duplicate prevented: ${notificationKey}`);
         return null;
       }
       
-      // Store this notification
       processedNotifications.set(notificationKey, now);
-      console.log(`✅ New notification: ${notificationKey.substring(0, 12)}...`);
-
-      // Get title and body
-      const title = remoteMessage.notification?.title || data.title || '📝 New Ticket Request';
-      const body = remoteMessage.notification?.body || data.message || 'Someone requested tickets';
-
-      console.log(`📨 Showing: ${title}`);
-
-      // Cancel any existing notification with same tag before showing new one
-      const ticketId = data.ticket_request_id;
-      if (ticketId) {
-        await notifee.cancelNotification(`ticket_${ticketId}`);
+      
+      // Extract title and body from notification data
+      let title = '📝 New Notification';
+      let body = 'You have a new notification';
+      
+      // Check notification object first
+      if (remoteMessage.notification) {
+        title = remoteMessage.notification.title || title;
+        body = remoteMessage.notification.body || body;
       }
-
-      // Show notification
-      await notifee.displayNotification({
-        id: notificationKey, // Use our generated key as ID
+      
+      // Override with data fields if available
+      if (data.title) title = data.title;
+      if (data.message || data.body) body = data.message || data.body;
+      
+      // Special formatting for ticket requests
+      const isTicketRequest = data.ticket_request_id;
+      if (isTicketRequest) {
+        title = '🎫 New Ticket Request';
+        const userName = data.user_name || 'Someone';
+        const quantity = data.ticket_quantity || '';
+        const gameName = data.game_name || 'your game';
+        body = `${userName} requested ${quantity} ticket(s) for ${gameName}`;
+        
+        // Add amount if available
+        if (data.total_amount) {
+          body += `\n💰 Amount: ₹${data.total_amount}`;
+        }
+      }
+      
+      console.log(`📨 Showing: ${title}`);
+      console.log(`📝 Body: ${body}`);
+      
+      // 🔥 FIXED: Remove badgeIconType and use correct AndroidBadgeIconType
+      const notificationId = await notifee.displayNotification({
+        id: notificationKey,
         title: title,
         body: body,
         data: data,
         android: {
-          channelId: 'ticket_channel',
+          channelId: 'urgent_channel',
           importance: AndroidImportance.HIGH,
-          pressAction: { 
+          pressAction: {
             id: 'default',
-            launchActivity: 'default',
           },
           smallIcon: 'ic_launcher',
-          fullScreenAction: {
-            id: 'default',
-            launchActivity: 'default',
-          },
-          asForegroundService: true,
           priority: 'high',
-          category: AndroidCategory.SOCIAL,
+          autoCancel: true,
           showTimestamp: true,
           timestamp: now,
-          vibrationPattern: [300, 500],
-          sound: 'default',
-          autoCancel: true,
-          ...(ticketId && { tag: `ticket_${ticketId}` }),
+          // Remove badgeIconType or use proper enum
+          color: '#4facfe',
         },
         ios: {
           foregroundPresentationOptions: {
@@ -148,31 +176,118 @@ class NotifeeService {
           },
         },
       });
-
-      console.log('✅ Heads-up notification shown');
-      return notificationKey;
+      
+      console.log('✅ Notification displayed with ID:', notificationId);
+      
+      // Trigger vibration for immediate feedback
+      if (Platform.OS === 'android') {
+        try {
+          Vibration.vibrate(500);
+          console.log('📳 Vibration triggered');
+        } catch (e) {
+          console.log('Vibration not supported');
+        }
+      }
+      
+      // Also try to show a heads-up notification as a second notification
+      setTimeout(async () => {
+        try {
+          const headsUpId = await notifee.displayNotification({
+            id: `${notificationKey}_heads`,
+            title: title,
+            body: body,
+            data: data,
+            android: {
+              channelId: 'urgent_channel',
+              importance: AndroidImportance.HIGH,
+              pressAction: {
+                id: 'default',
+                launchActivity: 'default',
+              },
+              smallIcon: 'ic_launcher',
+              priority: 'max',
+              fullScreenAction: {
+                id: 'default',
+                launchActivity: 'default',
+              },
+              category: AndroidCategory.SOCIAL,
+              autoCancel: true,
+              asForegroundService: true,
+              timeoutAfter: 10000,
+              showTimestamp: true,
+              timestamp: Date.now(),
+            },
+          });
+          console.log('✅ Heads-up also displayed:', headsUpId);
+        } catch (error) {
+          console.log('Heads-up failed:', error.message);
+        }
+      }, 100);
+      
+      return notificationId;
+      
     } catch (error) {
-      console.log('❌ Error:', error);
+      console.log('❌ Error displaying notification:', error.message);
+      
+      // If all else fails, try with absolute minimal configuration
+      try {
+        console.log('🔄 Trying minimal notification...');
+        
+        // Extract title and body for minimal notification
+        let title = 'New Ticket Request';
+        let body = 'You have a new ticket request';
+        
+        if (remoteMessage.data) {
+          const data = remoteMessage.data;
+          if (data.user_name && data.ticket_quantity && data.game_name) {
+            body = `${data.user_name} requested ${data.ticket_quantity} ticket(s) for ${data.game_name}`;
+          }
+        }
+        
+        const minimalId = await notifee.displayNotification({
+          title: title,
+          body: body,
+          data: remoteMessage.data || {},
+          android: {
+            channelId: 'urgent_channel',
+            importance: AndroidImportance.HIGH,
+          },
+        });
+        console.log('✅ Minimal notification displayed:', minimalId);
+        return minimalId;
+      } catch (minError) {
+        console.log('❌ All methods failed:', minError.message);
+        return null;
+      }
     }
   };
 
-  // Test function with built-in deduplication
-  testHeadsUp = async () => {
-    console.log('🔔 Testing heads-up...');
+  testNotification = async () => {
+    console.log('🔔 Testing notification...');
     await this.initialize();
-    
-    const timestamp = Date.now();
     
     await this.displayNotification({
       notification: {
-        title: '🔔 HEADS-UP TEST',
-        body: 'This should pop from the top!',
+        title: '🔔 TEST NOTIFICATION',
+        body: 'If you can see this, notifications are working!',
       },
       data: {
         type: 'test',
-        timestamp: timestamp.toString(),
+        timestamp: Date.now().toString(),
       },
     });
+  };
+
+  checkNotificationSettings = async () => {
+    try {
+      const settings = await notifee.getNotificationSettings();
+      console.log('🔍 Settings:', {
+        authorizationStatus: settings.authorizationStatus,
+        android: settings.android,
+      });
+    } catch (error) {
+      console.log('Could not check settings:', error);
+    }
   };
 }
 

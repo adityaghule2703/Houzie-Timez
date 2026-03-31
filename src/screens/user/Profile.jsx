@@ -9854,7 +9854,7 @@ const Profile = ({ onLogout }) => {
           </View>
         </View>
 
-        <TouchableOpacity 
+        {/* <TouchableOpacity 
           style={styles.notification}
           onPress={() => setModalVisible(true)}
         >
@@ -9864,7 +9864,7 @@ const Profile = ({ onLogout }) => {
               <Text style={styles.badgeText}>{notifications.length}</Text>
             </View>
           )}
-        </TouchableOpacity>
+        </TouchableOpacity> */}
       </LinearGradient>
     );
   };
@@ -10267,22 +10267,22 @@ const Profile = ({ onLogout }) => {
               end={{ x: 1, y: 1 }}
               style={styles.settingsCard}
             >
-              <SettingItem 
+              {/* <SettingItem 
                 icon="ticket"
                 title="My Tickets"
                 description="View your purchased tickets"
                 color={COLORS.primary}
                 index={0}
                 onPress={() => Alert.alert("Coming Soon", "My Tickets feature coming soon!")}
-              />
-              <SettingItem 
+              /> */}
+              {/* <SettingItem 
                 icon="wallet"
                 title="Wallet"
                 description="Manage your balance"
                 color={COLORS.purple}
                 index={1}
                 onPress={() => Alert.alert("Coming Soon", "Wallet feature coming soon!")}
-              />
+              /> */}
               <SettingItem 
                 icon="lock-closed"
                 title="Privacy & Security"
@@ -10400,7 +10400,7 @@ const Profile = ({ onLogout }) => {
         </Modal>
 
         {/* Notifications Modal */}
-        <Modal visible={modalVisible} transparent={true} animationType="slide">
+        {/* <Modal visible={modalVisible} transparent={true} animationType="slide">
           <View style={styles.modalOverlay}>
             <LinearGradient
               colors={COLORS.winnerGradient}
@@ -10465,7 +10465,7 @@ const Profile = ({ onLogout }) => {
               </TouchableOpacity>
             </LinearGradient>
           </View>
-        </Modal>
+        </Modal> */}
       </View>
     </SafeAreaView>
   );

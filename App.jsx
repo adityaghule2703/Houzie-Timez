@@ -58,6 +58,7 @@ import HostCalledNumbers from './src/screens/host/HostCalledNumbers';
 import HostGameOptions from './src/screens/host/HostGameOptions';
 import HostGameReward from './src/screens/host/HostGameReward';
 import HostLiveChat from './src/screens/host/HostLiveChat';
+import UserDemoGame from './src/screens/user/UserDemoGame';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -316,6 +317,7 @@ export default function App() {
                     <Stack.Screen name="UserGamePatterns" component={UserGamePatterns} />
                     <Stack.Screen name="UserCalledNumbers" component={UserCalledNumbers} />
                     <Stack.Screen name="UserGameResult" component={UserGameResult} />
+                    <Stack.Screen name="UserDemoGame" component={UserDemoGame} />
                     <Stack.Screen name="UserLiveChat" component={UserLiveChat} />
                   </>
                 )}

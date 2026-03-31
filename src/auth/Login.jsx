@@ -129,6 +129,19 @@ const Login = ({ navigation, onLoginSuccess }) => {
       }
     });
 
+    // 🔥 IMPORTANT: Handle foreground messages
+    const unsubscribeForeground = messaging().onMessage(async (remoteMessage) => {
+      console.log('📱 Foreground message received:', remoteMessage);
+      
+      // Display notification when app is in foreground
+      try {
+        await NotifeeService.displayNotification(remoteMessage);
+        console.log('✅ Foreground notification displayed');
+      } catch (error) {
+        console.log('❌ Failed to display foreground notification:', error);
+      }
+    });
+
     // Handle notification when app is in background/killed and opened
     messaging().getInitialNotification().then(remoteMessage => {
       if (remoteMessage) {
@@ -136,8 +149,6 @@ const Login = ({ navigation, onLoginSuccess }) => {
         handleNotificationOpen(remoteMessage);
       }
     });
-
-    
 
     // Handle notification when app is in background and brought to foreground
     const unsubscribeNotificationOpened = messaging().onNotificationOpenedApp(remoteMessage => {
@@ -152,6 +163,7 @@ const Login = ({ navigation, onLoginSuccess }) => {
 
     return () => {
       unsubscribeTokenRefresh();
+      unsubscribeForeground(); // Clean up foreground listener
       unsubscribeNotificationOpened();
       subscription.remove();
     };
