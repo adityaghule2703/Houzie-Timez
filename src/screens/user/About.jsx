@@ -206,7 +206,7 @@ const About = () => {
   };
 
   const handleWebsitePress = () => {
-    Linking.openURL('https://tambolatime.co.in/houzietimez/');
+    Linking.openURL('https://houzietimez.com');
   };
 
   const Header = () => {
@@ -652,13 +652,13 @@ const About = () => {
             <View style={styles.socialLinks}>
               <TouchableOpacity 
                 style={[styles.socialIcon, { backgroundColor: '#1877F2' }]}
-                onPress={() => Linking.openURL('https://www.facebook.com/houzietimez')}
+                onPress={() => Linking.openURL('https://www.facebook.com/share/18LUtp1xUn/')}
               >
                 <Ionicons name="logo-facebook" size={24} color={COLORS.surface} />
               </TouchableOpacity>
               <TouchableOpacity 
                 style={[styles.socialIcon, { backgroundColor: '#E4405F' }]}
-                onPress={() => Linking.openURL('https://www.instagram.com/houzietimez')}
+                onPress={() => Linking.openURL('https://www.instagram.com/houzie_timez?igsh=NjU3OHh3a3pjbmtl')}
               >
                 <Ionicons name="logo-instagram" size={24} color={COLORS.surface} />
               </TouchableOpacity>

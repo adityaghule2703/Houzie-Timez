@@ -596,31 +596,43 @@ Looking forward to playing Houzie! 🎲🎉`;
   }, []);
 
   const fetchGameStatus = async () => {
-    try {
-      const token = await AsyncStorage.getItem("token");
-      const response = await axios.get(
-        `https://tambolatime.co.in/public/api/user/games/${game.id}/calling-status`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: "application/json",
-          },
-        }
-      );
-
-      if (response.data.success) {
-        const data = response.data.data;
-        setGameStatus(data.game);
-        setCallingStatus(data.calling);
-        setCalledNumbers(data.numbers?.called_numbers || []);
-        
-        if (data.calling?.is_running && !data.calling?.is_paused) {
-          setTimer(data.calling?.interval_seconds || 60);
-        }
+  try {
+    const token = await AsyncStorage.getItem("token");
+    const response = await axios.get(
+      `https://tambolatime.co.in/public/api/user/games/${game.id}/calling-status`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: "application/json",
+        },
       }
-    } catch (error) {
+    );
+
+    if (response.data.success) {
+      const data = response.data.data;
+      setGameStatus(data.game);
+      setCallingStatus(data.calling);
+      
+      // FIX: Use total_called instead of called_numbers array
+      // Create an array of called numbers (if needed for display)
+      // Since your API doesn't provide the actual called numbers array,
+      // we'll create a placeholder or use total_called for count
+      const totalCalledCount = data.numbers?.total_called || 0;
+      
+      // If you need to display individual numbers, you'll need a different API endpoint
+      // For now, we'll create a dummy array with length = totalCalledCount
+      // or just store the count
+      const calledNumbersArray = Array.from({ length: totalCalledCount }, (_, i) => i + 1);
+      setCalledNumbers(calledNumbersArray);
+      
+      if (data.calling?.is_running && !data.calling?.is_paused) {
+        setTimer(data.calling?.interval_seconds || 60);
+      }
     }
-  };
+  } catch (error) {
+    console.error('Error fetching game status:', error);
+  }
+};
 
   const fetchMyTicketCount = async () => {
     try {

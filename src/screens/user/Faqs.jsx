@@ -134,7 +134,7 @@ const Faqs = () => {
           </Text>
         </View>
         <Text style={styles.helpLinksSubtitle}>
-          Watch tutorials to learn how to play Tambola games
+          Watch tutorials to learn how to play Houzie games
         </Text>
         
         <View style={styles.linksList}>
