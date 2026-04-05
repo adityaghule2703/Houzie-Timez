@@ -613,15 +613,7 @@ Looking forward to playing Houzie! 🎲🎉`;
       setGameStatus(data.game);
       setCallingStatus(data.calling);
       
-      // FIX: Use total_called instead of called_numbers array
-      // Create an array of called numbers (if needed for display)
-      // Since your API doesn't provide the actual called numbers array,
-      // we'll create a placeholder or use total_called for count
       const totalCalledCount = data.numbers?.total_called || 0;
-      
-      // If you need to display individual numbers, you'll need a different API endpoint
-      // For now, we'll create a dummy array with length = totalCalledCount
-      // or just store the count
       const calledNumbersArray = Array.from({ length: totalCalledCount }, (_, i) => i + 1);
       setCalledNumbers(calledNumbersArray);
       
@@ -978,63 +970,129 @@ Looking forward to playing Houzie! 🎲🎉`;
     </View>
   );
 
-  const Header = () => {
-    const gameNameLetters = game.game_name.split('').slice(0, 8).map((char, index) => ({
-      char,
-      index: index + 10,
-      isSpecial: index === 3 || index === 6
-    }));
+ const Header = () => {
+  const titleLetters = [
+    { char: 'G', index: 0 },
+    { char: 'A', index: 1 },
+    { char: 'M', index: 2 },
+    { char: 'E', index: 3 },
+    { char: ' ', index: 4, isSpace: true, width: 20 },
+    { char: 'D', index: 5, isSpecial: true },
+    { char: 'E', index: 6 },
+    { char: 'T', index: 7 },
+    { char: 'A', index: 8 },
+    { char: 'I', index: 9 },
+    { char: 'L', index: 10 },
+    { char: 'S', index: 11, isSpecial: true },
+  ];
 
-    return (
-      <LinearGradient
-        colors={COLORS.primaryGradient}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 0 }}
-        style={styles.header}
-      >
-        {renderHeaderPatterns()}
-        
-        <View style={styles.headerContent}>
-          <View style={styles.headerTop}>
-            <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => navigation.goBack()}
-            >
-              <Ionicons name="arrow-back" size={24} color={COLORS.surface} />
-            </TouchableOpacity>
-            
-            <View style={styles.headerTextContainer}>
-              <View style={styles.cartoonTitleRow}>
-                {gameNameLetters.map((item) => (
-                  <Animated.Text
-                    key={item.index}
-                    style={[
-                      styles.cartoonLetter,
-                      item.isSpecial && styles.specialCartoonLetter,
-                      { 
-                        transform: [{ scale: letterAnims.current[item.index] || 1 }],
-                      }
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {item.char}
-                  </Animated.Text>
-                ))}
-              </View>
-              <View style={styles.gameCodeContainer}>
-                <MaterialIcons
-                  name="fingerprint"
-                  size={14}
-                  color={COLORS.surface}
-                />
-                <Text style={styles.gameCode}>{game.game_code}</Text>
-              </View>
+  const gameName = game.game_name;
+  const displayGameName = gameName.length > 25 ? gameName.substring(0, 22) + '...' : gameName;
+
+  // Create animated values for each letter
+  const [letterScales] = useState(() => 
+    Array(titleLetters.length).fill().map(() => new Animated.Value(1))
+  );
+
+  useEffect(() => {
+    let currentIndex = 0;
+    let isAnimating = true;
+    
+    const animateNextLetter = () => {
+      if (!isAnimating) return;
+      
+      // Reset all letters to scale 1
+      letterScales.forEach(anim => {
+        anim.setValue(1);
+      });
+      
+      Animated.sequence([
+        Animated.timing(letterScales[currentIndex], {
+          toValue: 1.5,
+          duration: 200,
+          useNativeDriver: true,
+          easing: Easing.bounce,
+        }),
+        Animated.timing(letterScales[currentIndex], {
+          toValue: 1,
+          duration: 150,
+          useNativeDriver: true,
+          easing: Easing.bounce,
+        }),
+        Animated.delay(200),
+      ]).start(({ finished }) => {
+        if (finished && isAnimating) {
+          currentIndex = (currentIndex + 1) % letterScales.length;
+          animateNextLetter();
+        }
+      });
+    };
+    
+    animateNextLetter();
+    
+    return () => {
+      isAnimating = false;
+      if (letterScales) {
+        letterScales.forEach(anim => {
+          anim.stopAnimation();
+        });
+      }
+    };
+  }, []);
+
+  return (
+    <LinearGradient
+      colors={COLORS.primaryGradient}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={styles.header}
+    >
+      {renderHeaderPatterns()}
+      
+      <View style={styles.headerContent}>
+        <View style={styles.headerTop}>
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={COLORS.surface} />
+          </TouchableOpacity>
+          
+          <View style={styles.headerTextContainer}>
+            <View style={styles.cartoonTitleRow}>
+              {titleLetters.map((item) => (
+                <Animated.Text
+                  key={item.index}
+                  style={[
+                    styles.cartoonLetter,
+                    item.isSpecial && styles.specialCartoonLetter,
+                    item.isSpace && { width: item.width || 20 },
+                    { 
+                      transform: [{ scale: letterScales[item.index] }],
+                      marginHorizontal: item.isSpace ? 0 : 2,
+                    }
+                  ]}
+                >
+                  {item.char}
+                </Animated.Text>
+              ))}
+            </View>
+            <View style={styles.gameNameContainer}>
+              <MaterialIcons
+                name="sports-esports"
+                size={14}
+                color={COLORS.surface}
+              />
+              <Text style={styles.gameNameText} numberOfLines={1}>
+                {displayGameName}
+              </Text>
             </View>
           </View>
         </View>
-      </LinearGradient>
-    );
-  };
+      </View>
+    </LinearGradient>
+  );
+};
 
   if (initialLoading) {
     return (
@@ -2207,45 +2265,51 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     flexWrap: 'wrap',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   cartoonLetter: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '900',
     color: '#FDB800',
     textTransform: 'uppercase',
     textShadowColor: 'rgba(255, 193, 7, 0.5)',
-    textShadowOffset: { width: 3, height: 3 },
-    textShadowRadius: 8,
+    textShadowOffset: { width: 2, height: 2 },
+    textShadowRadius: 6,
     includeFontPadding: false,
-    marginHorizontal: 2,
+    marginHorizontal: 1,
     ...Platform.select({
       android: {
-        elevation: 5,
+        elevation: 4,
         textShadowColor: '#FFB300',
-        textShadowOffset: { width: 2, height: 2 },
-        textShadowRadius: 6,
+        textShadowOffset: { width: 1, height: 1 },
+        textShadowRadius: 4,
       },
     }),
   },
   specialCartoonLetter: {
-    fontSize: 32,
+    fontSize: 28,
     color: '#FFD700',
     textShadowColor: '#FF8C00',
-    textShadowOffset: { width: 4, height: 4 },
-    textShadowRadius: 10,
+    textShadowOffset: { width: 3, height: 3 },
+    textShadowRadius: 8,
     marginHorizontal: 2,
   },
-  gameCodeContainer: {
+  gameNameContainer: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    marginTop: 2,
+    marginTop: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderRadius: 8,
+    alignSelf: 'flex-start',
   },
-  gameCode: {
-    fontSize: 14,
+  gameNameText: {
+    fontSize: 13,
     color: COLORS.surface,
-    fontWeight: "600",
+    fontWeight: "500",
+    flex: 1,
   },
   content: {
     padding: 20,
