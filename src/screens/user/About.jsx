@@ -387,9 +387,6 @@ const About = () => {
             ]}
           >
             <View style={styles.heroContent}>
-              {/* <View style={styles.heroBadge}>
-                <Text style={styles.heroBadgeText}>Since 2020</Text>
-              </View> */}
               <Text style={styles.heroTitle}>Houzie Timez</Text>
               <Text style={styles.heroSubtitle}>India's Most Trusted Houzie Platform</Text>
               <Text style={styles.heroDescription}>
@@ -398,6 +395,31 @@ const About = () => {
               </Text>
             </View>
           </Animated.View>
+
+          {/* Social Links - Moved to Top */}
+          <View style={styles.socialSection}>
+            <Text style={styles.socialTitle}>Follow Us</Text>
+            <View style={styles.socialLinks}>
+              <TouchableOpacity 
+                style={[styles.socialIcon, { backgroundColor: '#1877F2' }]}
+                onPress={() => Linking.openURL('https://www.facebook.com/share/18LUtp1xUn/')}
+              >
+                <Ionicons name="logo-facebook" size={24} color={COLORS.surface} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.socialIcon, { backgroundColor: '#E4405F' }]}
+                onPress={() => Linking.openURL('https://www.instagram.com/houzie_timez?igsh=NjU3OHh3a3pjbmtl')}
+              >
+                <Ionicons name="logo-instagram" size={24} color={COLORS.surface} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.socialIcon, { backgroundColor: '#FF0000' }]}
+                onPress={() => Linking.openURL('https://www.youtube.com/@houzietimez')}
+              >
+                <Ionicons name="logo-youtube" size={24} color={COLORS.surface} />
+              </TouchableOpacity>
+            </View>
+          </View>
 
           <View style={styles.statsSection}>
             <StatCard number="24/7" label="Support Available" icon="headset" color={COLORS.primary} />
@@ -644,30 +666,6 @@ const About = () => {
                   <Text style={styles.contactValue}>24/7</Text>
                 </View>
               </View>
-            </View>
-          </View>
-
-          <View style={styles.section}>
-            <Text style={styles.socialTitle}>Follow Us</Text>
-            <View style={styles.socialLinks}>
-              <TouchableOpacity 
-                style={[styles.socialIcon, { backgroundColor: '#1877F2' }]}
-                onPress={() => Linking.openURL('https://www.facebook.com/share/18LUtp1xUn/')}
-              >
-                <Ionicons name="logo-facebook" size={24} color={COLORS.surface} />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.socialIcon, { backgroundColor: '#E4405F' }]}
-                onPress={() => Linking.openURL('https://www.instagram.com/houzie_timez?igsh=NjU3OHh3a3pjbmtl')}
-              >
-                <Ionicons name="logo-instagram" size={24} color={COLORS.surface} />
-              </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.socialIcon, { backgroundColor: '#FF0000' }]}
-                onPress={() => Linking.openURL('https://www.youtube.com/@houzietimez')}
-              >
-                <Ionicons name="logo-youtube" size={24} color={COLORS.surface} />
-              </TouchableOpacity>
             </View>
           </View>
 
@@ -1122,6 +1120,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
   },
 
+  // New social section styles
+  socialSection: {
+    paddingHorizontal: 16,
+    marginBottom: 24,
+    zIndex: 2,
+  },
   socialTitle: {
     fontSize: 14,
     color: COLORS.textLight,

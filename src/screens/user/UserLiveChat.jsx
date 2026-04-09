@@ -5173,6 +5173,7 @@ const UserLiveChat = ({ navigation, route }) => {
   const initialLoadDoneRef = useRef(false);
   const scrollOffsetRef = useRef(0);
   
+  
   // Pusher refs
   const pusherRef = useRef(null);
   const chatChannelRef = useRef(null);

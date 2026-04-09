@@ -38,21 +38,19 @@ const LIGHT_ACCENT = "#ffb74d";
 const DARK_BLUE = "#4facfe";
 
 const Faqs = () => {
+  // All hooks called unconditionally at the top level
   const [faqs, setFaqs] = useState([]);
   const [helpLinks, setHelpLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [linksLoading, setLinksLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [expanded, setExpanded] = useState({});
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(""); // Initialize as empty string
 
   useEffect(() => {
-    fetchData();
+    fetchFaqs();
+    fetchHelpLinks();
   }, []);
-
-  const fetchData = async () => {
-    await Promise.all([fetchFaqs(), fetchHelpLinks()]);
-  };
 
   const fetchFaqs = async () => {
     try {
@@ -63,6 +61,7 @@ const Faqs = () => {
       );
       if (res.data.status && res.data.data) setFaqs(res.data.data);
     } catch (err) {
+      console.error("FAQ fetch error:", err);
     } finally {
       setLoading(false);
     }
@@ -76,8 +75,17 @@ const Faqs = () => {
         "https://tambolatime.co.in/public/api/user/help-links",
         { headers: { Authorization: `Bearer ${token}` } }
       );
-      if (res.data.status && res.data.data) setHelpLinks(res.data.data);
+      if (res.data.status && res.data.data) {
+        // Fetch from the 'all' object in the response
+        if (res.data.data.all && Array.isArray(res.data.data.all)) {
+          setHelpLinks(res.data.data.all);
+        } else if (Array.isArray(res.data.data)) {
+          // Fallback for older API structure
+          setHelpLinks(res.data.data);
+        }
+      }
     } catch (err) {
+      console.error("Help links fetch error:", err);
     } finally {
       setLinksLoading(false);
     }
@@ -85,7 +93,7 @@ const Faqs = () => {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchData();
+    await Promise.all([fetchFaqs(), fetchHelpLinks()]);
     setRefreshing(false);
   };
 
@@ -94,7 +102,7 @@ const Faqs = () => {
     setExpanded((prev) => ({ ...prev, [id]: !prev[id] }));
   };
 
-  const openYouTubeLink = async (url) => {
+  const openLink = async (url) => {
     try {
       const supported = await Linking.canOpenURL(url);
       if (supported) {
@@ -103,6 +111,7 @@ const Faqs = () => {
         await Linking.openURL(url);
       }
     } catch (error) {
+      console.error("Error opening link:", error);
     }
   };
 
@@ -110,8 +119,11 @@ const Faqs = () => {
     Linking.openURL('https://wa.me/917507331103');
   };
 
+  // Safe filtering - ensure search is a string
   const filteredFaqs = faqs.filter((f) =>
-    f.question.toLowerCase().includes(search.toLowerCase())
+    f.question && typeof search === 'string' 
+      ? f.question.toLowerCase().includes(search.toLowerCase())
+      : true
   );
 
   const renderHelpLinks = () => {
@@ -123,38 +135,44 @@ const Faqs = () => {
       );
     }
 
-    if (helpLinks.length === 0) return null;
+    if (!helpLinks || helpLinks.length === 0) return null;
 
     return (
       <View style={styles.helpLinksContainer}>
         <View style={styles.helpLinksHeader}>
           <Icon name="videocam" size={22} color={PRIMARY_COLOR} />
           <Text style={styles.helpLinksTitle}>
-            Helpful Videos
+            Helpful Videos & Guides
           </Text>
         </View>
         <Text style={styles.helpLinksSubtitle}>
-          Watch tutorials to learn how to play Houzie games
+          Watch tutorials and read guides to learn how to play Houzie games
         </Text>
         
         <View style={styles.linksList}>
           {helpLinks.map((link, index) => (
             <TouchableOpacity
-              key={link.key || index}
+              key={link.id || link.key || index}
               style={styles.linkItem}
-              onPress={() => openYouTubeLink(link.url)}
+              onPress={() => openLink(link.url)}
               activeOpacity={0.7}
             >
               <View style={styles.linkIconContainer}>
-                <Icon name="play-circle" size={20} color={PRIMARY_COLOR} />
+                <Icon 
+                  name={link.type === "youtube" ? "play-circle" : "document-text"} 
+                  size={20} 
+                  color={PRIMARY_COLOR} 
+                />
               </View>
               <View style={styles.linkContent}>
                 <Text style={styles.linkTitle} numberOfLines={2}>
                   {link.title}
                 </Text>
-                <Text style={styles.linkDescription} numberOfLines={1}>
-                  {link.description}
-                </Text>
+                {link.description && (
+                  <Text style={styles.linkDescription} numberOfLines={1}>
+                    {link.description}
+                  </Text>
+                )}
               </View>
               <Icon name="chevron-forward" size={18} color={TEXT_LIGHT} />
             </TouchableOpacity>

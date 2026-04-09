@@ -1369,6 +1369,7 @@ const UserDemoGame = ({ navigation }) => {
               "When you complete a pattern, tap 'Claim' then select the pattern to claim it",
               "Mark all 15 numbers to win FULL HOUSE and stop auto-calling",
               "A celebration pops up once your claim is submitted — tap 'Claims' to see history",
+              "Note: The orange outline on called-but-not-marked numbers is for demonstration only and will not appear in the live game room",
             ].map((step, i) => (
               <View key={i} style={{ flexDirection:"row", alignItems:"flex-start", marginBottom:10, gap:10 }}>
                 <View style={{ width:24, height:24, borderRadius:12, backgroundColor:COLORS.primary, justifyContent:"center", alignItems:"center" }}>

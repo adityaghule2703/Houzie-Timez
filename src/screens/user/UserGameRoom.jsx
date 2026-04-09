@@ -1302,38 +1302,41 @@ const UserGameRoom = ({ navigation, route }) => {
     }
   };
 
-  const fetchGamePatternsForViewing = async () => {
-    try {
-      setLoadingPatterns(true);
-      const token = await AsyncStorage.getItem("token");
-      const response = await axios.get(
-        "https://tambolatime.co.in/public/api/user/games",
-        { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
-      );
-      if (response.data.success) {
-        const games = response.data.games.data;
-        const currentGame = games.find(game => game.id === parseInt(gameId));
-        if (currentGame?.pattern_rewards) {
-          const gamePatterns = currentGame.pattern_rewards.map(pattern => ({
-            ...pattern,
-            id: pattern.pattern_id,
-            pattern_id: pattern.pattern_id,
-            pattern_name: pattern.reward_name.toLowerCase().replace(/ /g, '_'),
-            display_name: pattern.reward_name,
-            amount: pattern.amount,
-          }));
-          setAvailablePatterns(sortPatternsBySequence(gamePatterns));
-        } else {
-          setAvailablePatterns([]);
-        }
+ const fetchGamePatternsForViewing = async () => {
+  try {
+    setLoadingPatterns(true);
+    // First ensure we have latest availability data
+    await fetchPatternAvailability();
+    
+    const token = await AsyncStorage.getItem("token");
+    const response = await axios.get(
+      "https://tambolatime.co.in/public/api/user/games",
+      { headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } }
+    );
+    if (response.data.success) {
+      const games = response.data.games.data;
+      const currentGame = games.find(game => game.id === parseInt(gameId));
+      if (currentGame?.pattern_rewards) {
+        const gamePatterns = currentGame.pattern_rewards.map(pattern => ({
+          ...pattern,
+          id: pattern.pattern_id,
+          pattern_id: pattern.pattern_id,
+          pattern_name: pattern.reward_name.toLowerCase().replace(/ /g, '_'),
+          display_name: pattern.reward_name,
+          amount: pattern.amount,
+        }));
+        setAvailablePatterns(sortPatternsBySequence(gamePatterns));
+      } else {
+        setAvailablePatterns([]);
       }
-    } catch (error) {
-      showSnackbar("Failed to load patterns", 'error');
-      setAvailablePatterns([]);
-    } finally {
-      setLoadingPatterns(false);
     }
-  };
+  } catch (error) {
+    showSnackbar("Failed to load patterns", 'error');
+    setAvailablePatterns([]);
+  } finally {
+    setLoadingPatterns(false);
+  }
+};
 
   const handleViewPatterns = (ticketId, index) => {
     playClickSound();
@@ -1343,13 +1346,21 @@ const UserGameRoom = ({ navigation, route }) => {
   };
 
   const handlePatternSelect = (pattern) => {
-    const patternToUse = { ...pattern, pattern_name: pattern.pattern_name || pattern.id?.toString() };
-    setSelectedPatternForView(patternToUse);
-    setBlinkingPattern(patternToUse);
-    setShowPatternsModal(false);
-    showSnackbar(`Showing ${pattern.display_name} pattern on all tickets`, 'info');
-    setTimeout(() => startBlinkingForAllTickets(patternToUse, 5000), 300);
-  };
+  const availability = patternAvailability[pattern.pattern_id];
+  const isAvailable = availability?.available === true && (availability?.availableCount || 0) > 0;
+  
+  if (!isAvailable) {
+    showSnackbar(`${pattern.display_name} has no prizes left!`, 'error');
+    return;
+  }
+  
+  const patternToUse = { ...pattern, pattern_name: pattern.pattern_name || pattern.id?.toString() };
+  setSelectedPatternForView(patternToUse);
+  setBlinkingPattern(patternToUse);
+  setShowPatternsModal(false);
+  showSnackbar(`Showing ${pattern.display_name} pattern on all tickets`, 'info');
+  setTimeout(() => startBlinkingForAllTickets(patternToUse, 5000), 300);
+};
 
   const updatePatternCounts = (claimsData) => {
     const ticketPatterns = { ...patternsByTicket };
@@ -1994,76 +2005,145 @@ const UserGameRoom = ({ navigation, route }) => {
     );
   };
 
-  const renderPatternsModal = () => {
-    if (!selectedTicket) return null;
-    return (
-      <Modal transparent visible={showPatternsModal} animationType="slide" onRequestClose={() => { setShowPatternsModal(false); stopAllBlinking(); }}>
-        <TouchableOpacity style={styles.patternsModalOverlay} activeOpacity={1} onPress={() => { setShowPatternsModal(false); stopAllBlinking(); }}>
-          <LinearGradient colors={[COLORS.surface, COLORS.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.patternsModalContainer} onStartShouldSetResponder={() => true}>
-            <View style={styles.patternsModalHeader}>
-              <Text style={styles.patternsModalTitle}>Available Patterns</Text>
-              <View style={styles.patternsModalHeaderActions}>
-                <TouchableOpacity onPress={() => fetchGamePatternsForViewing()} style={styles.refreshPatternsButton} disabled={loadingPatterns}>
-                  {loadingPatterns ? <ActivityIndicator size="small" color={COLORS.textLight} /> : <Ionicons name="refresh" size={20} color={COLORS.textLight} />}
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => { setShowPatternsModal(false); stopAllBlinking(); }} style={styles.patternsModalCloseButton}>
-                  <Ionicons name="close" size={24} color={COLORS.textLight} />
-                </TouchableOpacity>
-              </View>
+const renderPatternsModal = () => {
+  if (!selectedTicket) return null;
+  return (
+    <Modal transparent visible={showPatternsModal} animationType="slide" onRequestClose={() => { setShowPatternsModal(false); stopAllBlinking(); }}>
+      <TouchableOpacity style={styles.patternsModalOverlay} activeOpacity={1} onPress={() => { setShowPatternsModal(false); stopAllBlinking(); }}>
+        <LinearGradient colors={[COLORS.surface, COLORS.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.patternsModalContainer} onStartShouldSetResponder={() => true}>
+          <View style={styles.patternsModalHeader}>
+            <Text style={styles.patternsModalTitle}>Available Patterns</Text>
+            <View style={styles.patternsModalHeaderActions}>
+              <TouchableOpacity onPress={() => fetchGamePatternsForViewing()} style={styles.refreshPatternsButton} disabled={loadingPatterns}>
+                {loadingPatterns ? <ActivityIndicator size="small" color={COLORS.textLight} /> : <Ionicons name="refresh" size={20} color={COLORS.textLight} />}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => { setShowPatternsModal(false); stopAllBlinking(); }} style={styles.patternsModalCloseButton}>
+                <Ionicons name="close" size={24} color={COLORS.textLight} />
+              </TouchableOpacity>
             </View>
-            <Text style={styles.patternsModalSubtitle}>Tap a pattern to see it highlighted on ALL your tickets for 5 seconds</Text>
-            {blinkingPattern && (
-              <LinearGradient colors={[COLORS.warning + '20', COLORS.warning + '10']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.currentBlinkingPatternContainer}>
-                <Ionicons name="star" size={18} color={COLORS.warning} />
-                <Text style={styles.currentBlinkingPatternText}>Showing: <Text style={styles.currentBlinkingPatternName}>{blinkingPattern.display_name}</Text></Text>
-                <TouchableOpacity style={styles.stopBlinkingButton} onPress={stopAllBlinking}>
-                  <Ionicons name="stop-circle" size={16} color={COLORS.red} /><Text style={styles.stopBlinkingText}>Stop</Text>
-                </TouchableOpacity>
-              </LinearGradient>
-            )}
-            {loadingPatterns ? (
-              <View style={styles.patternsLoadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.patternsLoadingText}>Loading patterns...</Text></View>
-            ) : (
-              <ScrollView style={styles.patternsList} showsVerticalScrollIndicator nestedScrollEnabled>
-                {availablePatterns.length === 0 ? (
-                  <View style={styles.noAvailablePatternsContainer}>
-                    <Ionicons name="alert-circle-outline" size={40} color={COLORS.warning} />
-                    <Text style={styles.noAvailablePatternsText}>No patterns available for this game</Text>
-                  </View>
-                ) : (
-                  availablePatterns.map((pattern, index) => {
-                    const isSelected = selectedPatternForView?.id === pattern.id;
-                    return (
-                      <TouchableOpacity key={index} style={[styles.patternListItem, isSelected && styles.selectedPatternListItem]} onPress={() => handlePatternSelect(pattern)} activeOpacity={0.7}>
-                        <LinearGradient colors={isSelected ? COLORS.primaryGradient : [COLORS.surface, COLORS.surface]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.patternListItemGradient}>
-                          <View style={styles.patternListItemContent}>
-                            <Ionicons name="star" size={18} color={isSelected ? COLORS.surface : COLORS.primary} />
-                            <View style={styles.patternListItemInfo}>
-                              <Text style={[styles.patternListItemName, isSelected && { color: COLORS.surface }]}>{pattern.display_name}{isSelected && <Text style={styles.selectedBadge}> • Selected</Text>}</Text>
-                              <Text style={[styles.patternListItemDesc, isSelected && { color: COLORS.surface }]} numberOfLines={2}>{getPatternDescription(pattern.pattern_name)}{pattern.amount && <Text style={styles.patternAmountText}> • Prize: ₹{pattern.amount}</Text>}</Text>
+          </View>
+          <Text style={styles.patternsModalSubtitle}>Tap a pattern to see it highlighted on ALL your tickets for 5 seconds</Text>
+          {blinkingPattern && (
+            <LinearGradient colors={[COLORS.warning + '20', COLORS.warning + '10']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={styles.currentBlinkingPatternContainer}>
+              <Ionicons name="star" size={18} color={COLORS.warning} />
+              <Text style={styles.currentBlinkingPatternText}>Showing: <Text style={styles.currentBlinkingPatternName}>{blinkingPattern.display_name}</Text></Text>
+              <TouchableOpacity style={styles.stopBlinkingButton} onPress={stopAllBlinking}>
+                <Ionicons name="stop-circle" size={16} color={COLORS.red} /><Text style={styles.stopBlinkingText}>Stop</Text>
+              </TouchableOpacity>
+            </LinearGradient>
+          )}
+          {loadingPatterns ? (
+            <View style={styles.patternsLoadingContainer}><ActivityIndicator size="large" color={COLORS.primary} /><Text style={styles.patternsLoadingText}>Loading patterns...</Text></View>
+          ) : (
+            <ScrollView style={styles.patternsList} showsVerticalScrollIndicator nestedScrollEnabled>
+              {availablePatterns.length === 0 ? (
+                <View style={styles.noAvailablePatternsContainer}>
+                  <Ionicons name="alert-circle-outline" size={40} color={COLORS.warning} />
+                  <Text style={styles.noAvailablePatternsText}>No patterns available for this game</Text>
+                </View>
+              ) : (
+                availablePatterns.map((pattern, index) => {
+                  const isSelected = selectedPatternForView?.id === pattern.id;
+                  const availability = patternAvailability[pattern.pattern_id];
+                  const isAvailable = availability?.available === true && (availability?.availableCount || 0) > 0;
+                  const availableCount = availability?.availableCount || 0;
+                  const totalCount = availability?.totalCount || 0;
+                  
+                  return (
+                    <TouchableOpacity 
+                      key={index} 
+                      style={[
+                        styles.patternListItem, 
+                        isSelected && styles.selectedPatternListItem,
+                        !isAvailable && styles.disabledPatternListItem
+                      ]} 
+                      onPress={() => isAvailable && handlePatternSelect(pattern)} 
+                      activeOpacity={isAvailable ? 0.7 : 1}
+                      disabled={!isAvailable}
+                    >
+                      <LinearGradient 
+                        colors={isSelected ? COLORS.primaryGradient : [COLORS.surface, COLORS.surface]} 
+                        start={{ x: 0, y: 0 }} 
+                        end={{ x: 1, y: 0 }} 
+                        style={styles.patternListItemGradient}
+                      >
+                        <View style={styles.patternListItemContent}>
+                          <Ionicons 
+                            name="star" 
+                            size={18} 
+                            color={!isAvailable ? COLORS.grey : (isSelected ? COLORS.surface : COLORS.primary)} 
+                          />
+                          <View style={styles.patternListItemInfo}>
+                            <View style={styles.patternNameRow}>
+                              <Text style={[
+                                styles.patternListItemName, 
+                                isSelected && { color: COLORS.surface },
+                                !isAvailable && styles.disabledPatternText
+                              ]}>
+                                {pattern.display_name}
+                              </Text>
+                              {!isAvailable && (
+                                <View style={styles.soldOutBadge}>
+                                  <Text style={styles.soldOutBadgeText}>SOLD OUT</Text>
+                                </View>
+                              )}
                             </View>
-                            <View style={styles.patternActionContainer}>{isSelected ? <Ionicons name="checkmark-circle" size={22} color={COLORS.surface} /> : <Ionicons name="eye" size={18} color={COLORS.primary} />}</View>
+                            <Text style={[
+                              styles.patternListItemDesc, 
+                              isSelected && { color: COLORS.surface },
+                              !isAvailable && styles.disabledPatternText
+                            ]} numberOfLines={2}>
+                              {getPatternDescription(pattern.pattern_name)}
+                              {pattern.amount && (
+                                <Text style={[styles.patternAmountText, !isAvailable && styles.disabledPatternText]}> • Prize: ₹{pattern.amount}</Text>
+                              )}
+                            </Text>
+                            {totalCount > 0 && (
+                              <View style={styles.availabilityContainer}>
+                                <View style={[
+                                  styles.availabilityBadge,
+                                  isAvailable ? styles.availableBadge : styles.unavailableBadge
+                                ]}>
+                                  <Text style={styles.availabilityText}>
+                                    {availableCount} / {totalCount} Available
+                                  </Text>
+                                </View>
+                                {!isAvailable && availableCount === 0 && (
+                                  <Text style={styles.soldOutText}>No prizes left for this pattern</Text>
+                                )}
+                              </View>
+                            )}
                           </View>
-                        </LinearGradient>
-                      </TouchableOpacity>
-                    );
-                  })
-                )}
-              </ScrollView>
-            )}
-            <View style={styles.patternsModalFooter}>
-              <TouchableOpacity style={styles.clearSelectionButton} onPress={() => { setSelectedPatternForView(null); stopAllBlinking(); }}>
-                <Ionicons name="refresh" size={16} color={COLORS.textLight} /><Text style={styles.clearSelectionButtonText}>Clear Selection</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.closePatternsButton} onPress={() => { setShowPatternsModal(false); setSelectedPatternForView(null); stopAllBlinking(); }}>
-                <LinearGradient colors={COLORS.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.closePatternsGradient}><Text style={styles.closePatternsButtonText}>Close</Text></LinearGradient>
-              </TouchableOpacity>
-            </View>
-          </LinearGradient>
-        </TouchableOpacity>
-      </Modal>
-    );
-  };
+                          <View style={styles.patternActionContainer}>
+                            {isSelected ? (
+                              <Ionicons name="checkmark-circle" size={22} color={COLORS.surface} />
+                            ) : isAvailable ? (
+                              <Ionicons name="eye" size={18} color={COLORS.primary} />
+                            ) : (
+                              <Ionicons name="lock-closed" size={18} color={COLORS.grey} />
+                            )}
+                          </View>
+                        </View>
+                      </LinearGradient>
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </ScrollView>
+          )}
+          <View style={styles.patternsModalFooter}>
+            <TouchableOpacity style={styles.clearSelectionButton} onPress={() => { setSelectedPatternForView(null); stopAllBlinking(); }}>
+              <Ionicons name="refresh" size={16} color={COLORS.textLight} /><Text style={styles.clearSelectionButtonText}>Clear Selection</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.closePatternsButton} onPress={() => { setShowPatternsModal(false); setSelectedPatternForView(null); stopAllBlinking(); }}>
+              <LinearGradient colors={COLORS.primaryGradient} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.closePatternsGradient}><Text style={styles.closePatternsButtonText}>Close</Text></LinearGradient>
+            </TouchableOpacity>
+          </View>
+        </LinearGradient>
+      </TouchableOpacity>
+    </Modal>
+  );
+};
 
   const renderWinningCelebration = () => {
     if (!showWinningCelebration) return null;
@@ -2111,7 +2191,7 @@ const UserGameRoom = ({ navigation, route }) => {
       </View>
       {[
         "Numbers are called automatically by the host — each called number glows orange on your ticket.",
-        "Tap an orange (called) number on your ticket to mark it red. Tapping an uncalled number shows a warning.",
+        
         "Long-press any marked number to hear it read aloud.",
         "Tap 'Patterns' to see all winning patterns — tap one to highlight those cells on all your tickets for 5 seconds.",
         "When you complete a winning pattern, a green chip appears above your ticket. Tap it to claim instantly!",
@@ -2662,6 +2742,64 @@ const styles = StyleSheet.create({
   snackbarIcon: { marginRight: 12 },
   snackbarText: { color: COLORS.surface, fontSize: 14, fontWeight: '600', flex: 1 },
   bottomSpace: { height: 20 },
+  // Add these to your styles object
+disabledPatternListItem: {
+  opacity: 0.6,
+  backgroundColor: COLORS.grey + '10',
+},
+disabledPatternText: {
+  color: COLORS.grey,
+},
+patternNameRow: {
+  flexDirection: 'row',
+  alignItems: 'center',
+  flexWrap: 'wrap',
+  gap: 6,
+  marginBottom: 3,
+},
+soldOutBadge: {
+  backgroundColor: COLORS.red + '20',
+  paddingHorizontal: 6,
+  paddingVertical: 2,
+  borderRadius: 4,
+  borderWidth: 1,
+  borderColor: COLORS.red + '40',
+},
+soldOutBadgeText: {
+  fontSize: 9,
+  fontWeight: '700',
+  color: COLORS.red,
+},
+availabilityContainer: {
+  marginTop: 6,
+},
+availabilityBadge: {
+  paddingHorizontal: 8,
+  paddingVertical: 3,
+  borderRadius: 6,
+  alignSelf: 'flex-start',
+},
+availableBadge: {
+  backgroundColor: COLORS.green + '15',
+  borderWidth: 1,
+  borderColor: COLORS.green + '30',
+},
+unavailableBadge: {
+  backgroundColor: COLORS.red + '15',
+  borderWidth: 1,
+  borderColor: COLORS.red + '30',
+},
+availabilityText: {
+  fontSize: 10,
+  fontWeight: '600',
+  color: COLORS.textDark,
+},
+soldOutText: {
+  fontSize: 10,
+  color: COLORS.red,
+  marginTop: 2,
+  fontStyle: 'italic',
+},
 });
 
 export default UserGameRoom;
