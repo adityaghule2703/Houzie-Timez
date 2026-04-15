@@ -77,7 +77,7 @@ const CustomLoader = () => {
   const floatAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(-width)).current;
   const fadeAnim = useRef(new Animated.Value(1)).current;
-
+  
   const messages = [
     "Setting up your game...",
     "Shuffling Tambola tickets 🎟️",
@@ -86,7 +86,7 @@ const CustomLoader = () => {
     "Almost ready to play 🔥",
     "Still loading... your luck is being calculated 😄"
   ];
-
+  
   const [currentText, setCurrentText] = useState(0);
   const [animationLoop, setAnimationLoop] = useState(true);
 
